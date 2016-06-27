@@ -26,13 +26,30 @@ def read_secrets():
     return content
 
 
+song_queue = []
+
+playing = False
+
+
+def queue_next_song():
+    global playing
+    if playing:
+        return
+    if len(song_queue) > 0:
+        queue_next_song = song_queue.pop(0)
+        player.queue(queue_next_song)
+        player.play()
+        playing = True
+
+
 def start_bot():
     global updater
     updater = Updater(token=token)
     dispatcher = updater.dispatcher
 
     dispatcher.add_handler(CommandHandler('start', start))
-    dispatcher.add_handler(CommandHandler('next', lambda b, u: player.next()))
+    dispatcher.add_handler(
+        CommandHandler('next', lambda b, u: player.next_source(), queue_next_song()))
     dispatcher.add_handler(CommandHandler('play', lambda b, u: player.play()))
     dispatcher.add_handler(
         CommandHandler('pause', lambda b, u: player.pause()))
@@ -112,14 +129,22 @@ def load_song(store_id):
     return fname
 
 
+def lookup_song_name(store_id):
+    if store_id in song_names:
+        return song_names[store_id]
+    else:
+        info = api.get_track_info(store_id)
+        return "{} - {}".format(info["artist"], info["title"])
+
+
 def queue(bot, update):
     storeId = update.chosen_inline_result["result_id"]
     user = update.chosen_inline_result["from_user"]
-    song_name = song_names[storeId]
+    song_name = lookup_song_name(storeId)
     fname = load_song(storeId)
     res = pyglet.media.load(fname)
-    player.queue(res)
-    player.play()
+    song_queue.append(res)
+    queue_next_song()
     print("QUEUED by", user["first_name"], ":", song_name)
 
 user, password, device_id, token = read_secrets()
@@ -134,12 +159,19 @@ player = None
 updater = None
 
 
+def test():
+    print("test")
+    global playing
+    playing = False
+    queue_next_song()
+
+
 def run_piglet():
     global pyglet, player
     import pyglet
     pyglet = pyglet
     player = pyglet.media.Player()
-    player.play()
+    player.set_handler("on_player_eos", test)
     pyglet.app.run()
 
 pyglet_thread = threading.Thread(target=run_piglet, name="pyglet_thread")
