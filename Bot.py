@@ -2,12 +2,13 @@
 import datetime
 import json
 import os
+import signal
 import sys
 import threading
+from time import sleep
 import urllib
 
 from gmusicapi.clients.mobileclient import Mobileclient
-import pyglet
 from telegram import InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import InlineQueryHandler, ChosenInlineResultHandler
 from telegram.ext.commandhandler import CommandHandler
@@ -28,6 +29,7 @@ def read_secrets():
 
 
 def start_bot():
+    global updater
     updater = Updater(token=token)
     dispatcher = updater.dispatcher
 
@@ -127,22 +129,65 @@ user, password, device_id, token = read_secrets()
 api = Mobileclient(debug_logging=False)
 if not api.login(user, password, device_id, "de_DE"):
     print("Failed to log in to gmusic")
-    exit(1)
+    sys.exit(1)
 
-player = pyglet.media.Player()
-player.play()
-
+pyglet = None
+player = None
 updater = None
-threading.Thread(target=start_bot, name="bot_thread").start()
 
-pyglet.app.run()
-updater.stop()
-player.delete()
-api.logout()
-for file in os.listdir("songs"):
+
+def run_piglet():
+    global pyglet, player
+    import pyglet
+    pyglet = pyglet
+    player = pyglet.media.Player()
+    player.play()
+    pyglet.app.run()
+
+pyglet_thread = threading.Thread(target=run_piglet, name="pyglet_thread")
+bot_thread = threading.Thread(target=start_bot, name="bot_thread")
+pyglet_thread.start()
+bot_thread.start()
+
+exiting = False
+
+
+def exit_bot(signum=None, frame=None):
+    global exiting
+    if exiting:
+        return
+    exiting = True
+    print("EXITING {} ...".format(signum))
+    updater.stop()
+    pyglet.app.exit()
+    player.delete()
+    api.logout()
+    for file in os.listdir("songs"):
+        try:
+            os.remove("songs/" + file)
+        except PermissionError:
+            pass
+
+    print("EXIT")
+    sys.exit(0)
+
+
+def listen_exit():
+    signal.signal(signal.SIGTERM, exit_bot)
+    signal.signal(signal.SIGINT, exit_bot)
+    signal.signal(signal.SIGABRT, exit_bot)
+
+listen_exit()
+print("LISTENING")
+while 1:
     try:
-        os.remove("songs/" + file)
-    except PermissionError:
-        pass
-
-print("EXIT")
+        input_str = input("")
+        if input_str.lower() == "exit":
+            exit_bot()
+    except SystemExit:
+        break
+    except EOFError:
+        if exiting:
+            break
+        else:
+            print("Try again?")
