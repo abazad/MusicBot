@@ -14,6 +14,8 @@ from telegram.ext import InlineQueryHandler, ChosenInlineResultHandler
 from telegram.ext.commandhandler import CommandHandler
 from telegram.ext.updater import Updater
 
+import player
+
 
 def pretty(some_map):
     return json.dumps(some_map, indent=4, sort_keys=True)
@@ -27,33 +29,19 @@ def read_secrets():
     return content
 
 
-song_queue = []
-
-playing = False
-
-
-def queue_next_song():
-    global playing
-    if playing:
-        return
-    if len(song_queue) > 0:
-        queue_next_song = song_queue.pop(0)["res"]
-        player.queue(queue_next_song)
-        player.play()
-        playing = True
-
-
 def start_bot():
     global updater
+    print("Updater starting")
     updater = Updater(token=token)
     dispatcher = updater.dispatcher
 
     dispatcher.add_handler(CommandHandler('start', start))
     dispatcher.add_handler(
-        CommandHandler('next', lambda b, u: player.next_source(), queue_next_song()))
-    dispatcher.add_handler(CommandHandler('play', lambda b, u: player.play()))
+        CommandHandler('next', lambda b, u: queued_player.next()))
     dispatcher.add_handler(
-        CommandHandler('pause', lambda b, u: player.pause()))
+        CommandHandler('play', lambda b, u: queued_player.resume()))
+    dispatcher.add_handler(
+        CommandHandler('pause', lambda b, u: queued_player.pause()))
     dispatcher.add_handler(CommandHandler('showqueue', show_queue))
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
@@ -70,9 +58,10 @@ def start(bot, update):
 
 def show_queue(bot, update):
     message = "*Current queue:*\n"
-    if len(song_queue) > 0:
-        message += reduce("{}\n{}".format, map(lambda x:
-                                               lookup_song_name(x["store_id"]), song_queue))
+    queue = queued_player.get_queue()
+    if len(queue) > 0:
+        message += reduce("{}\n{}".format,
+                          map(lookup_song_name, queue))
     else:
         message += "_empty..._"
     bot.send_message(
@@ -123,7 +112,6 @@ def get_inline_handler():
 
         results = list(map(get_inline_result, search_results))
         bot.answerInlineQuery(update.inline_query.id, results)
-        # action("SONG")
     return inline_handler
 
 
@@ -155,9 +143,7 @@ def queue(bot, update):
     user = update.chosen_inline_result["from_user"]
     song_name = lookup_song_name(storeId)
     fname = load_song(storeId)
-    res = pyglet.media.load(fname)
-    song_queue.append({"store_id": storeId, "res": res})
-    queue_next_song()
+    queued_player.queue(storeId, fname)
     print("QUEUED by", user["first_name"], ":", song_name)
 
 user, password, device_id, token = read_secrets()
@@ -167,29 +153,18 @@ if not api.login(user, password, device_id, "de_DE"):
     print("Failed to log in to gmusic")
     sys.exit(1)
 
-pyglet = None
-player = None
+queued_player = None
 updater = None
 
 
-def test():
-    print("test")
-    global playing
-    playing = False
-    queue_next_song()
+def run_player():
+    global queued_player
+    queued_player = player.Player()
+    queued_player.run()
 
-
-def run_piglet():
-    global pyglet, player
-    import pyglet
-    pyglet = pyglet
-    player = pyglet.media.Player()
-    player.set_handler("on_player_eos", test)
-    pyglet.app.run()
-
-pyglet_thread = threading.Thread(target=run_piglet, name="pyglet_thread")
+player_thread = threading.Thread(target=run_player, name="player_thread")
 bot_thread = threading.Thread(target=start_bot, name="bot_thread")
-pyglet_thread.start()
+player_thread.start()
 bot_thread.start()
 
 exiting = False
@@ -202,8 +177,7 @@ def exit_bot(signum=None, frame=None):
     exiting = True
     print("EXITING {} ...".format(signum))
     updater.stop()
-    pyglet.app.exit()
-    player.delete()
+    queued_player.close()
     api.logout()
     for file in os.listdir("songs"):
         try:
