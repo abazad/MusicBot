@@ -10,8 +10,11 @@ import urllib
 
 from gmusicapi.clients.mobileclient import Mobileclient
 from telegram import InlineQueryResultArticle, InputTextMessageContent
+from telegram import replykeyboardhide
+from telegram import replykeyboardmarkup
 from telegram.ext import InlineQueryHandler, ChosenInlineResultHandler
 from telegram.ext.commandhandler import CommandHandler
+from telegram.ext.messagehandler import MessageHandler, Filters
 from telegram.ext.updater import Updater
 
 import player
@@ -31,9 +34,10 @@ def read_secrets():
 
 def start_bot():
     global updater
-    print("Updater starting")
     updater = Updater(token=token)
     dispatcher = updater.dispatcher
+
+    dispatcher.add_handler(MessageHandler([Filters.text], handle_message))
 
     dispatcher.add_handler(CommandHandler('start', start))
     dispatcher.add_handler(
@@ -42,13 +46,34 @@ def start_bot():
         CommandHandler('play', lambda b, u: queued_player.resume()))
     dispatcher.add_handler(
         CommandHandler('pause', lambda b, u: queued_player.pause()))
+    dispatcher.add_handler(CommandHandler('skip', skip))
     dispatcher.add_handler(CommandHandler('showqueue', show_queue))
+
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
 
     updater.start_polling()
 
-    print("Updater running")
+
+def handle_message(bot, update):
+    chat_id = update.message.chat_id
+    if chat_id in skip_keyboard_sent:
+        text = update.message.text
+        if ")" not in text:
+            return
+        c = text.split(")")[0]
+        if str.isdecimal(c):
+            i = int(c) - 1
+            queued_player.skip_song(queue_position=i)
+            hide_keyboard(bot, chat_id, get_queue_message())
+        else:
+            print("INVALID CHOICE:", c)
+
+
+def hide_keyboard(bot, chat_id, message):
+    markup = replykeyboardhide.ReplyKeyboardHide()
+    bot.send_message(
+        chat_id=chat_id, text=message, reply_markup=markup, parse_mode="markdown")
 
 
 def start(bot, update):
@@ -56,7 +81,7 @@ def start(bot, update):
         text="Type @gmusicqueuebot and search for a song", chat_id=update.message.chat_id)
 
 
-def show_queue(bot, update):
+def get_queue_message():
     message = "*Current queue:*\n"
     queue = queued_player.get_queue()
     if len(queue) > 0:
@@ -64,8 +89,40 @@ def show_queue(bot, update):
                           map(lookup_song_name, queue))
     else:
         message += "_empty..._"
+    return message
+
+
+def show_queue(bot, update):
+    message = get_queue_message()
     bot.send_message(
         chat_id=update.message.chat_id, text=message, parse_mode="markdown")
+
+skip_keyboard_sent = []
+
+
+def skip(bot, update):
+    queue = queued_player.get_queue()
+
+    if len(queue) == 0:
+        bot.send_message(chat_id=update.message.chat_id,
+                         text="No songs in queue", reply_to_message_id=update.message.message_id)
+        return
+
+    chat_id = update.message.chat_id
+    if chat_id in skip_keyboard_sent:
+        return
+
+    keyboard = []
+    for i in range(0, len(queue)):
+        keyboard.append(["{}) {}".format(i + 1, lookup_song_name(queue[i]))])
+
+    markup = replykeyboardmarkup.ReplyKeyboardMarkup(
+        keyboard, one_time_keyboard=True)
+
+    bot.send_message(chat_id=chat_id, text="What song?",
+                     reply_markup=markup, reply_to_message_id=update.message.message_id)
+
+    skip_keyboard_sent.append(chat_id)
 
 
 def search_song(query, max_results=10):
@@ -195,7 +252,7 @@ def listen_exit():
     signal.signal(signal.SIGABRT, exit_bot)
 
 listen_exit()
-print("LISTENING")
+print("RUNNING")
 while 1:
     try:
         input_str = input("")

@@ -16,8 +16,20 @@ class Player(object):
             self._on_eos()
 
     def get_queue(self):
-
         return list(map(lambda song: song["store_id"], self._queue))
+
+    '''
+    Needs argument store_id or queue_position
+    '''
+
+    def skip_song(self, **kwargs):
+        if "store_id" in kwargs:
+            store_id = kwargs["store_id"]
+            self._queue = list(
+                filter(lambda song: song["store_id"] != store_id))
+        elif "queue_position" in kwargs:
+            pos = kwargs["queue_position"]
+            self._queue.pop(pos)
 
     def pause(self):
         self._player.pause()
