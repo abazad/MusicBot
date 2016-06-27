@@ -57,15 +57,21 @@ def search_song(query, max_results=10):
         songs.append(song)
     return songs
 
+song_names = {}
+
 
 def get_inline_handler():
     def get_inline_result(song):
+        song_id = song["storeId"]
+        song_title = song["title"]
+        artist = song["artist"]
+        song_str = "{} - {}".format(artist, song_title)
+        song_names[song_id] = song_str
         result = InlineQueryResultArticle(
-            id=song["storeId"],
-            title=song["title"],
-            description="by {}".format(song["artist"]),
-            input_message_content=InputTextMessageContent(
-                "{} - {}".format(song["artist"], song["title"]))
+            id=song_id,
+            title=song_title,
+            description="by {}".format(artist),
+            input_message_content=InputTextMessageContent(song_str)
         )
 
         if "albumArtRef" in song:
@@ -97,7 +103,7 @@ def load_song(store_id):
     page = urllib.request.urlopen(request)
 
     time = datetime.datetime.now()
-    fname = "songs/" + "{}-{}-{}-{}{}{}".format(
+    fname = "songs/" + "{}-{}-{}-{}-{}-{}".format(
         time.year, time.month, time.day, time.hour, time.minute, time.second) + ".mp3"
     file = open(fname, "wb")
     file.write(page.read())
@@ -108,11 +114,13 @@ def load_song(store_id):
 
 def queue(bot, update):
     storeId = update.chosen_inline_result["result_id"]
+    user = update.chosen_inline_result["from_user"]
+    song_name = song_names[storeId]
     fname = load_song(storeId)
     res = pyglet.media.load(fname)
     player.queue(res)
     player.play()
-    print("QUEUED")
+    print("QUEUED by", user["first_name"], ":", song_name)
 
 user, password, device_id, token = read_secrets()
 
