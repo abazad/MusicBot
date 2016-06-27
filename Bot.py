@@ -111,6 +111,7 @@ def queue(bot, update):
     fname = load_song(storeId)
     res = pyglet.media.load(fname)
     player.queue(res)
+    player.play()
     print("QUEUED")
 
 user, password, device_id, token = read_secrets()
