@@ -1,4 +1,5 @@
 #  -*- coding: utf-8 -*-
+from _functools import reduce
 import datetime
 import json
 import os
@@ -36,7 +37,7 @@ def queue_next_song():
     if playing:
         return
     if len(song_queue) > 0:
-        queue_next_song = song_queue.pop(0)
+        queue_next_song = song_queue.pop(0)["res"]
         player.queue(queue_next_song)
         player.play()
         playing = True
@@ -53,6 +54,7 @@ def start_bot():
     dispatcher.add_handler(CommandHandler('play', lambda b, u: player.play()))
     dispatcher.add_handler(
         CommandHandler('pause', lambda b, u: player.pause()))
+    dispatcher.add_handler(CommandHandler('showqueue', show_queue))
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
 
@@ -64,6 +66,17 @@ def start_bot():
 def start(bot, update):
     bot.sendMessage(
         text="Type @gmusicqueuebot and search for a song", chat_id=update.message.chat_id)
+
+
+def show_queue(bot, update):
+    message = "*Current queue:*\n"
+    if len(song_queue) > 0:
+        message += reduce("{}\n{}".format, map(lambda x:
+                                               lookup_song_name(x["store_id"]), song_queue))
+    else:
+        message += "_empty..._"
+    bot.send_message(
+        chat_id=update.message.chat_id, text=message, parse_mode="markdown")
 
 
 def search_song(query, max_results=10):
@@ -143,7 +156,7 @@ def queue(bot, update):
     song_name = lookup_song_name(storeId)
     fname = load_song(storeId)
     res = pyglet.media.load(fname)
-    song_queue.append(res)
+    song_queue.append({"store_id": storeId, "res": res})
     queue_next_song()
     print("QUEUED by", user["first_name"], ":", song_name)
 
