@@ -5,14 +5,12 @@ import os
 import signal
 import sys
 import threading
-from time import sleep
 import urllib
 
 from gmusicapi.clients.mobileclient import Mobileclient
 from telegram import InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import InlineQueryHandler, ChosenInlineResultHandler
 from telegram.ext.commandhandler import CommandHandler
-from telegram.ext.messagehandler import MessageHandler, Filters
 from telegram.ext.updater import Updater
 
 
