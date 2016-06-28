@@ -25,11 +25,15 @@ def pretty(some_map):
 
 
 def read_secrets():
-    secrets = open("secrets.txt", "r")
-    content = secrets.readlines()
+    secrets = open("secrets.json", "r")
+    content = secrets.read()
     secrets.close()
-    content = list(map(str.strip, content))
-    return content
+    content = json.loads(content)
+    user = content["username"].strip()
+    password = content["password"].strip()
+    device_id = content["device_id"].strip()
+    token = content["token"].strip()
+    return user, password, device_id, token
 
 
 def start_bot():
