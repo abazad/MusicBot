@@ -1,6 +1,7 @@
 # TelegramMusicBot
+This bot lets users select songs from Google Play Music to play on the bot host machine
 
-## Usage:
+## Installation:
 - Works with Python 3+
 - You'll need to provide in the secrets.json:
   - your Google username/email and password
@@ -9,6 +10,13 @@
     - enable inline mode with /setinline
     - enable inline feedback with /setinline
     - this bot does not work well in groups, so disable /setjoingroups
+
+## Commands:
+* pause - pause playback
+* play - resume playback
+* next - skip current song
+* showqueue - show current queue
+* skip - skip a song in the queue
 
 ## Dependencies:
   - [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
