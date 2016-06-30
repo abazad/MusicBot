@@ -70,6 +70,7 @@ def handle_message(bot, update):
             i = int(c) - 1
             queued_player.skip_song(queue_position=i)
             hide_keyboard(bot, chat_id, get_queue_message())
+            skip_keyboard_sent.remove(chat_id)
         else:
             print("INVALID CHOICE:", c)
 
@@ -101,7 +102,7 @@ def show_queue(bot, update):
     bot.send_message(
         chat_id=update.message.chat_id, text=message, parse_mode="markdown")
 
-skip_keyboard_sent = []
+skip_keyboard_sent = set()
 
 
 def skip(bot, update):
@@ -126,7 +127,7 @@ def skip(bot, update):
     bot.send_message(chat_id=chat_id, text="What song?",
                      reply_markup=markup, reply_to_message_id=update.message.message_id)
 
-    skip_keyboard_sent.append(chat_id)
+    skip_keyboard_sent.add(chat_id)
 
 
 def search_song(query, max_results=10):
