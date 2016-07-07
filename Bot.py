@@ -86,13 +86,13 @@ def start(bot, update):
 
 
 def get_queue_message():
-    message = "*Current queue:*\n"
     queue = queued_player.get_queue()
+    message = "\n"
+    header_str = "*Current queue:*"
     if len(queue) > 0:
-        message += reduce("{}\n{}".format,
-                          map(lookup_song_name, queue))
+        message = message.join(header_str, map(lookup_song_name, queue))
     else:
-        message += "_empty..._"
+        message = message.join(header_str, "_empty..._")
     return message
 
 
@@ -182,8 +182,9 @@ def load_song(store_id):
     page = urllib.request.urlopen(request)
 
     time = datetime.datetime.now()
-    fname = "songs/" + "{}-{}-{}-{}-{}-{}".format(
-        time.year, time.month, time.day, time.hour, time.minute, time.second) + ".mp3"
+    fname = "songs/" + \
+        "-".join(time.year, time.month, time.day, time.hour,
+                 time.minute, time.second) + ".mp3"
     file = open(fname, "wb")
     file.write(page.read())
     file.close()
