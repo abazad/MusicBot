@@ -1,4 +1,3 @@
-#  -*- coding: utf-8 -*-
 from _functools import reduce
 import datetime
 import json
