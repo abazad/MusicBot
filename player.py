@@ -66,6 +66,12 @@ class SongProvider(object):
             self._playlist_token = ids['playlist_token']
             self._station_id = ids['station_id']
 
+    def reset(self):
+        os.remove("ids.json")
+        api = self._api
+        api.delete_stations([self._station_id])
+        api.delete_playlist(self._playlist_id)
+
 
 class SongQueue(list):
 
@@ -91,6 +97,9 @@ class SongQueue(list):
             return self._load_song(args[0])
         threading.Thread(target=_load_song, name="song_loader").start()
         return result
+
+    def reset(self):
+        self._song_provider.reset()
 
 
 class Player(object):
@@ -130,6 +139,10 @@ class Player(object):
 
     def next(self):
         self._player.next_source()
+
+    def reset(self):
+        self._queue.reset()
+        self._player.delete()
 
     def _on_eos(self):
         from pyglet.media import MediaFormatException

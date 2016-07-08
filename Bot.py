@@ -248,6 +248,11 @@ def exit_bot(signum=None, frame=None):
     sys.exit(0)
 
 
+def reset_bot():
+    queued_player.reset()
+    exit_bot()
+
+
 def listen_exit():
     signal.signal(signal.SIGTERM, exit_bot)
     signal.signal(signal.SIGINT, exit_bot)
@@ -260,6 +265,8 @@ while 1:
         input_str = input("")
         if input_str.lower() == "exit":
             exit_bot()
+        if input_str.lower() == "reset":
+            reset_bot()
     except SystemExit:
         break
     except EOFError:
