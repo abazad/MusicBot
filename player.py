@@ -13,9 +13,9 @@ class SongProvider(object):
     def get_song(self):
         result = None
 
-        try:
+        if self._last_played:
             result = choice(self._last_played)
-        except IndexError:
+        else:
             # TODO: choose random song
             store_id = "Tuxryaz562qed3adlgm74ooxgue"
             result = store_id
