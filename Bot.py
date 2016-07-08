@@ -223,7 +223,7 @@ updater = None
 
 def run_player():
     global queued_player
-    queued_player = player.Player(load_song)
+    queued_player = player.Player(load_song, api)
     queued_player.run()
 
 player_thread = threading.Thread(target=run_player, name="player_thread")

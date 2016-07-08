@@ -7,8 +7,9 @@ import time
 
 class SongProvider(object):
 
-    def __init__(self):
+    def __init__(self, api):
         self._last_played = []
+        self._api = api
 
     def get_song(self):
         result = None
@@ -54,12 +55,12 @@ class SongQueue(list):
 
 class Player(object):
 
-    def __init__(self, load_song):
+    def __init__(self, load_song, api):
         import pyglet
         self._pyglet = pyglet
         pyglet.options['audio'] = ('directsound', 'pulse', 'openal')
         self._player = pyglet.media.Player()
-        self._queue = SongQueue(SongProvider(), load_song)
+        self._queue = SongQueue(SongProvider(api), load_song)
         self._load_song = load_song
         self._player.set_handler("on_player_eos", self._on_eos)
         self._on_eos()
