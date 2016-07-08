@@ -15,8 +15,10 @@ This bot lets users select songs from Google Play Music to play on the bot host 
 * pause - pause playback
 * play - resume playback
 * next - skip current song
-* showqueue - show current queue
+* currentsong - shows the name of the currently playing song
 * skip - skip a song in the queue
+* showqueue - show current queue
+* clearqueue - clear the current queue
 
 ## Dependencies:
   - [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
