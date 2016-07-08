@@ -51,6 +51,8 @@ def start_bot():
     dispatcher.add_handler(CommandHandler('showqueue', show_queue))
     dispatcher.add_handler(
         CommandHandler('currentsong', lambda b, u: show_current_song(b, u.message.chat_id)))
+    dispatcher.add_handler(
+        CommandHandler('clearqueue', lambda b, u: queued_player.clear_queue()))
 
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))

@@ -148,6 +148,9 @@ class Player(object):
     def get_current_song(self):
         return self._current_song
 
+    def clear_queue(self):
+        self._queue.clear()
+
     def _on_eos(self):
         from pyglet.media import MediaFormatException
 
