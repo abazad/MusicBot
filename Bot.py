@@ -1,7 +1,6 @@
-from _functools import reduce
-import datetime
 import json
 import os
+from os.path import isfile, isdir
 import signal
 import sys
 import threading
@@ -90,9 +89,9 @@ def get_queue_message():
     message = "\n"
     header_str = "*Current queue:*"
     if len(queue) > 0:
-        message = message.join(header_str, map(lookup_song_name, queue))
+        message = header_str + message.join(map(lookup_song_name, queue))
     else:
-        message = message.join(header_str, "_empty..._")
+        message = message.join([header_str, "_empty..._"])
     return message
 
 
@@ -177,18 +176,21 @@ def get_inline_handler():
 
 
 def load_song(store_id):
-    url = api.get_stream_url(store_id)
-    request = urllib.request.Request(url)
-    page = urllib.request.urlopen(request)
+    fname = "songs/" + store_id + ".mp3"
 
-    time = datetime.datetime.now()
-    fname = "songs/" + \
-        "-".join(time.year, time.month, time.day, time.hour,
-                 time.minute, time.second) + ".mp3"
-    file = open(fname, "wb")
-    file.write(page.read())
-    file.close()
-    page.close()
+    if not isfile(fname):
+        url = api.get_stream_url(store_id)
+        request = urllib.request.Request(url)
+        page = urllib.request.urlopen(request)
+
+        if not isdir("songs"):
+            os.mkdir("songs")
+
+        file = open(fname, "wb")
+        file.write(page.read())
+        file.close()
+        page.close()
+
     return fname
 
 
@@ -204,8 +206,7 @@ def queue(bot, update):
     storeId = update.chosen_inline_result["result_id"]
     user = update.chosen_inline_result["from_user"]
     song_name = lookup_song_name(storeId)
-    fname = load_song(storeId)
-    queued_player.queue(storeId, fname)
+    queued_player.queue(storeId)
     print("QUEUED by", user["first_name"], ":", song_name)
 
 user, password, device_id, token = read_secrets()
@@ -221,7 +222,7 @@ updater = None
 
 def run_player():
     global queued_player
-    queued_player = player.Player()
+    queued_player = player.Player(load_song)
     queued_player.run()
 
 player_thread = threading.Thread(target=run_player, name="player_thread")
@@ -241,11 +242,6 @@ def exit_bot(signum=None, frame=None):
     updater.stop()
     queued_player.close()
     api.logout()
-    for file in os.listdir("songs"):
-        try:
-            os.remove("songs/" + file)
-        except PermissionError:
-            pass
 
     print("EXIT")
     sys.exit(0)
