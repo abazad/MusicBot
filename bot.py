@@ -42,8 +42,7 @@ def start_bot():
     dispatcher.add_handler(MessageHandler([Filters.text], handle_message))
 
     dispatcher.add_handler(CommandHandler('start', start))
-    dispatcher.add_handler(
-        CommandHandler('next', lambda b, u: queued_player.next()))
+    dispatcher.add_handler(CommandHandler('next', next_song))
     dispatcher.add_handler(
         CommandHandler('play', lambda b, u: queued_player.resume()))
     dispatcher.add_handler(
@@ -127,6 +126,13 @@ def skip(bot, update):
                      reply_markup=markup, reply_to_message_id=update.message.message_id)
 
     skip_keyboard_sent.add(chat_id)
+
+
+def next_song(bot, update):
+    queued_player.next()
+    message = update.message
+    bot.send_message(chat_id=message.chat_id, text="Now playing: {}".format(
+        lookup_song_name(queued_player.get_current_song())))
 
 
 def search_song(query, max_results=20):

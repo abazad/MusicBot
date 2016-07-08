@@ -113,6 +113,7 @@ class Player(object):
         self._load_song = load_song
         self._player.set_handler("on_player_eos", self._on_eos)
         self._on_eos()
+        self._current_song = None
 
     def queue(self, store_id):
         self._queue.append(store_id)
@@ -144,6 +145,9 @@ class Player(object):
         self._queue.reset()
         self._player.delete()
 
+    def get_current_song(self):
+        return self._current_song
+
     def _on_eos(self):
         from pyglet.media import MediaFormatException
 
@@ -153,6 +157,7 @@ class Player(object):
             fname = self._load_song(song)
             try:
                 res = self._pyglet.media.load(fname)
+                self._current_song = song
             except MediaFormatException:
                 gc.collect()
 
