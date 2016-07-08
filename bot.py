@@ -49,6 +49,8 @@ def start_bot():
         CommandHandler('pause', lambda b, u: queued_player.pause()))
     dispatcher.add_handler(CommandHandler('skip', skip))
     dispatcher.add_handler(CommandHandler('showqueue', show_queue))
+    dispatcher.add_handler(
+        CommandHandler('currentsong', lambda b, u: show_current_song(b, u.message.chat_id)))
 
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
@@ -131,7 +133,11 @@ def skip(bot, update):
 def next_song(bot, update):
     queued_player.next()
     message = update.message
-    bot.send_message(chat_id=message.chat_id, text="Now playing: {}".format(
+    show_current_song(bot, message.chat_id)
+
+
+def show_current_song(bot, chat_id):
+    bot.send_message(chat_id=chat_id, text="Now playing: {}".format(
         lookup_song_name(queued_player.get_current_song())))
 
 
@@ -202,6 +208,8 @@ def load_song(store_id):
 
 
 def lookup_song_name(store_id):
+    if not store_id:
+        return "Nothing"
     if store_id in song_names:
         return song_names[store_id]
     else:
