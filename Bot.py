@@ -129,7 +129,7 @@ def skip(bot, update):
     skip_keyboard_sent.add(chat_id)
 
 
-def search_song(query, max_results=10):
+def search_song(query, max_results=20):
     results = api.search(query, max_results)
     songs = []
     for track in results["song_hits"]:
