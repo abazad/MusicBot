@@ -1,4 +1,5 @@
 import gc
+import json
 import os
 from random import choice
 import threading
@@ -8,23 +9,62 @@ import time
 class SongProvider(object):
 
     def __init__(self, api):
-        self._last_played = []
         self._api = api
+        self._playlist_id = None
+        self._playlist_token = None
+        self._station_id = None
+        self._last_played = []
+        self._try_restore_ids()
 
     def get_song(self):
-        result = None
-
-        if self._last_played:
-            result = choice(self._last_played)
-        else:
-            # TODO: choose random song
-            store_id = "Tj6fhurtstzgdpvfm4xv6i5cei4"
-            result = store_id
-
-        return result
+        self._create_playlist()
+        if not self._station_id:
+            self._create_station()
+        song = self._api.get_station_tracks(
+            self._station_id, recently_played_ids=self._last_played)
+        if song:
+            store_id = choice(song)['storeId']
+            self._last_played.append(store_id)
+            return store_id
+        # Fallback song
+        return "Tj6fhurtstzgdpvfm4xv6i5cei4"
 
     def add_played(self, song):
+        self._create_playlist()
+        self._api.add_songs_to_playlist(self._playlist_id, song)
         self._last_played.append(song)
+        if len(self._last_played) > 20:
+            self._last_played = self._last_played[-20::]
+
+    def _create_playlist(self):
+        if not self._playlist_id:
+            self._playlist_id = self._api.create_playlist("BotPlaylist")
+            self._write_ids()
+            playlist = list(filter(
+                lambda p: p['id'] == self._playlist_id, self._api.get_all_playlists()))[0]
+            self._playlist_token = playlist['shareToken']
+
+    def _create_station(self):
+        if not self._station_id:
+            self._station_id = self._api.create_station(
+                "BotStation", playlist_token=self._playlist_token)
+            self._write_ids()
+
+    def _write_ids(self):
+        ids = {'playlist_token': self._playlist_token,
+               'playlist_id': self._playlist_id, 'station_id': self._station_id}
+        id_file = open("ids.json", "w")
+        id_file.write(json.dumps(ids, indent=4, sort_keys=True))
+        id_file.close()
+
+    def _try_restore_ids(self):
+        if os.path.isfile("ids.json"):
+            id_file = open("ids.json", "r")
+            ids = json.loads(id_file.read())
+            id_file.close()
+            self._playlist_id = ids['playlist_id']
+            self._playlist_token = ids['playlist_token']
+            self._station_id = ids['station_id']
 
 
 class SongQueue(list):
