@@ -89,7 +89,8 @@ def get_queue_message():
     message = "\n"
     header_str = "*Current queue:*"
     if len(queue) > 0:
-        message = header_str + message.join(map(lookup_song_name, queue))
+        message = header_str + "\n" + \
+            message.join(map(lookup_song_name, queue))
     else:
         message = message.join([header_str, "_empty..._"])
     return message
