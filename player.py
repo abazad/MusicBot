@@ -18,7 +18,7 @@ class SongProvider(object):
             result = choice(self._last_played)
         else:
             # TODO: choose random song
-            store_id = "Tuxryaz562qed3adlgm74ooxgue"
+            store_id = "Tj6fhurtstzgdpvfm4xv6i5cei4"
             result = store_id
 
         return result
