@@ -1,12 +1,10 @@
 import json
-import os
-from os.path import isfile, isdir
 import signal
 import sys
 import threading
-import urllib
 
 from gmusicapi.clients.mobileclient import Mobileclient
+import pafy
 from telegram import InlineQueryResultArticle, InputTextMessageContent
 from telegram import replykeyboardhide
 from telegram import replykeyboardmarkup
@@ -31,7 +29,9 @@ def read_secrets():
     password = content["password"].strip()
     device_id = content["device_id"].strip()
     token = content["token"].strip()
-    return user, password, device_id, token
+    youtube_token = content["youtube_bot_token"]
+    api_key = content["youtube_api_key"]
+    return user, password, device_id, token, youtube_token, api_key
 
 
 def start_bot():
@@ -57,6 +57,17 @@ def start_bot():
 
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
+
+    updater.start_polling()
+
+
+def start_youtube_bot():
+    global youtube_updater
+    updater = Updater(token=youtube_token)
+    dispatcher = updater.dispatcher
+
+    dispatcher.add_handler(InlineQueryHandler(get_youtube_inline_handler()))
+    dispatcher.add_handler(ChosenInlineResultHandler(youtube_queue))
 
     updater.start_polling()
 
@@ -93,7 +104,7 @@ def get_queue_message():
     header_str = "*Current queue:*"
     if len(queue) > 0:
         message = header_str + "\n" + \
-            message.join(map(lookup_song_name, queue))
+            message.join(map(lambda song: song['name'], queue))
     else:
         message = message.join([header_str, "_empty..._"])
     return message
@@ -111,7 +122,8 @@ def send_queue_keyboard(bot, chat_id, message_id, text):
     queue = queued_player.get_queue()
     keyboard = []
     for i in range(0, len(queue)):
-        keyboard.append(["{}) {}".format(i + 1, lookup_song_name(queue[i]))])
+        keyboard.append(
+            ["{}) {}".format(i + 1, queue[i]['name'])])
 
     markup = replykeyboardmarkup.ReplyKeyboardMarkup(
         keyboard, one_time_keyboard=True, resize_keyboard=True)
@@ -181,18 +193,17 @@ def next_song(bot, update):
 
 def show_current_song(bot, chat_id):
     bot.send_message(chat_id=chat_id, text="Now playing: {}".format(
-        lookup_song_name(queued_player.get_current_song())))
+        queued_player.get_current_song()['name']))
 
 
-def search_song(query, max_results=20):
+def search_song(query):
+    max_results = 20
     results = api.search(query, max_results)
     songs = []
     for track in results["song_hits"]:
         song = track["track"]
         songs.append(song)
     return songs
-
-song_names = {}
 
 
 def get_inline_handler():
@@ -201,7 +212,6 @@ def get_inline_handler():
         song_title = song["title"]
         artist = song["artist"]
         song_str = "{} - {}".format(artist, song_title)
-        song_names[song_id] = song_str
         result = InlineQueryResultArticle(
             id=song_id,
             title=song_title,
@@ -231,43 +241,97 @@ def get_inline_handler():
     return inline_handler
 
 
-def load_song(store_id):
-    fname = "songs/" + store_id + ".mp3"
+def search_youtube_song(query):
+    qs = {
+        'q': query,
+        'maxResults': 20,
+        'safeSearch': "none",
+        'part': 'id,snippet',
+        'type': 'video',
+        'key': youtube_api_key
+    }
 
-    if not isfile(fname):
-        url = api.get_stream_url(store_id)
-        request = urllib.request.Request(url)
-        page = urllib.request.urlopen(request)
+    wdata = pafy.call_gdata('search', qs)
+    return wdata['items']
 
-        if not isdir("songs"):
-            os.mkdir("songs")
 
-        file = open(fname, "wb")
-        file.write(page.read())
-        file.close()
-        page.close()
+def get_youtube_inline_handler():
+    def get_inline_result(song):
+        song_id = song['id']['videoId']
+        snippet = song['snippet']
+        title = snippet['title']
+        song_names[song_id] = title
+        description = snippet["description"]
+        result = InlineQueryResultArticle(
+            id=song_id,
+            title=title,
+            description=description,
+            input_message_content=InputTextMessageContent(title)
+        )
 
-    return fname
+        if "thumbnails" in snippet:
+            thumbnails = snippet['thumbnails']
+            url = thumbnails['medium']['url']
+            result.thumb_url = url
+
+        return result
+
+    def inline_handler(bot, update):
+        query = update.inline_query.query
+        if not query:
+            return
+
+        search_results = search_youtube_song(query)
+        results = list(map(get_inline_result, search_results))
+        bot.answerInlineQuery(update.inline_query.id, results)
+    return inline_handler
+
+song_names = {}
 
 
 def lookup_song_name(store_id):
     if not store_id:
         return "Nothing"
-    if store_id in song_names:
+    elif store_id in song_names:
         return song_names[store_id]
     else:
         info = api.get_track_info(store_id)
-        return "{} - {}".format(info["artist"], info["title"])
+        title = "{} - {}".format(info["artist"], info["title"])
+        song_names[store_id] = title
+        return title
+
+
+def lookup_youtube_song_name(video_id):
+    if not video_id:
+        return "Nothing"
+    elif video_id in song_names:
+        return song_names[video_id]
+    else:
+        url = "https://www.youtube.com/watch?v=" + video_id
+        video = pafy.new(url)
+        title = video.title
+        song_names[video_id] = title
+        return title
 
 
 def queue(bot, update):
     storeId = update.chosen_inline_result["result_id"]
     user = update.chosen_inline_result["from_user"]
     song_name = lookup_song_name(storeId)
-    queued_player.queue(storeId)
+    queued_player.queue(
+        {'store_id': storeId, 'load_song': player.get_gmusic_loader(api, storeId), 'name': song_name})
     print("QUEUED by", user["first_name"], ":", song_name)
 
-user, password, device_id, token = read_secrets()
+
+def youtube_queue(bot, update):
+    video_id = update.chosen_inline_result["result_id"]
+    user = update.chosen_inline_result["from_user"]
+    song_name = lookup_youtube_song_name(video_id)
+    queued_player.queue({'store_id': video_id, 'load_song': player.get_youtube_loader(
+        video_id), 'name': song_name})
+    print("YT_QUEUED by", user["first_name"], ":", song_name)
+
+user, password, device_id, token, youtube_token, youtube_api_key = read_secrets()
 
 api = Mobileclient(debug_logging=False)
 if not api.login(user, password, device_id, "de_DE"):
@@ -276,17 +340,21 @@ if not api.login(user, password, device_id, "de_DE"):
 
 queued_player = None
 updater = None
+youtube_updater = None
 
 
 def run_player():
     global queued_player
-    queued_player = player.Player(load_song, api)
+    queued_player = player.Player(api)
     queued_player.run()
 
 player_thread = threading.Thread(target=run_player, name="player_thread")
 bot_thread = threading.Thread(target=start_bot, name="bot_thread")
+youtube_bot_thread = threading.Thread(
+    target=start_youtube_bot, name="youtube_bot_thread")
 player_thread.start()
 bot_thread.start()
+youtube_bot_thread.start()
 
 exiting = False
 
@@ -298,6 +366,7 @@ def exit_bot(signum=None, frame=None):
     exiting = True
     print("EXITING {} ...".format(signum))
     updater.stop()
+    youtube_updater.stop()
     queued_player.close()
     api.logout()
 

@@ -4,6 +4,57 @@ import os
 from random import choice
 import threading
 import time
+import urllib
+import pafy
+
+
+def get_youtube_loader(video_id):
+    def _youtube_loader():
+        url = "https://www.youtube.com/watch?v=" + video_id
+
+        video = pafy.new(url)
+        audios = video.audiostreams
+        audio = None
+        for a in filter(lambda a: a.extension == "m4a", audios):
+            if audio is None:
+                audio = a
+            elif a.bitrate > audio.bitrate:
+                audio = a
+        if audio is None:
+            print("ERROR, NO m4a!")
+            audio = video.getbestaudio()
+
+        fname = "songs/" + video.videoid + "." + audio.extension
+
+        if not os.path.isdir("songs"):
+            os.mkdir("songs")
+
+        if not os.path.isfile(fname):
+            audio.download(filepath=fname, quiet=True)
+
+        return fname
+    return _youtube_loader
+
+
+def get_gmusic_loader(api, store_id):
+    def _gmusic_loader():
+        fname = "songs/" + store_id + '.mp3'
+
+        if not os.path.isfile(fname):
+            url = api.get_stream_url(store_id)
+            request = urllib.request.Request(url)
+            page = urllib.request.urlopen(request)
+
+            if not os.path.isdir("songs"):
+                os.mkdir("songs")
+
+            file = open(fname, "wb")
+            file.write(page.read())
+            file.close()
+            page.close()
+
+        return fname
+    return _gmusic_loader
 
 
 class SongProvider(object):
@@ -23,16 +74,22 @@ class SongProvider(object):
         song = self._api.get_station_tracks(
             self._station_id, recently_played_ids=self._last_played)
         if song:
-            store_id = choice(song)['storeId']
+            song = choice(song)
+            store_id = song['storeId']
+            name = "{} - {}".format(song["artist"], song["title"])
+            song = {'store_id': store_id,
+                    'load_song': get_gmusic_loader(self._api, store_id),
+                    'name': name}
             self._last_played.append(store_id)
-            return store_id
+            return song
         # Fallback song
         return "Tj6fhurtstzgdpvfm4xv6i5cei4"
 
     def add_played(self, song):
         self._create_playlist()
-        self._api.add_songs_to_playlist(self._playlist_id, song)
-        self._last_played.append(song)
+        store_id = song['store_id']
+        self._api.add_songs_to_playlist(self._playlist_id, store_id)
+        self._last_played.append(store_id)
         if len(self._last_played) > 20:
             self._last_played = self._last_played[-20::]
 
@@ -75,27 +132,26 @@ class SongProvider(object):
 
 class SongQueue(list):
 
-    def __init__(self, song_provider, load_song):
+    def __init__(self, song_provider):
         self._song_provider = song_provider
-        self._load_song = load_song
 
     def pop(self, *args, **kwargs):
         result = None
 
         try:
             result = list.pop(self, *args, **kwargs)
-            self._song_provider.add_played(result)
+            # All gmusic store ids start with T and are 27 chars long
+            if result['store_id'].startswith("T") and len(result['store_id']) == 27:
+                self._song_provider.add_played(result)
         except IndexError:
             result = self._song_provider.get_song()
-
         return result
 
     def append(self, *args, **kwargs):
         result = list.append(self, *args, **kwargs)
 
-        def _load_song():
-            return self._load_song(args[0])
-        threading.Thread(target=_load_song, name="song_loader").start()
+        threading.Thread(
+            target=args[0]['load_song'], name="song_loader").start()
         return result
 
     def reset(self):
@@ -104,19 +160,19 @@ class SongQueue(list):
 
 class Player(object):
 
-    def __init__(self, load_song, api):
+    def __init__(self, api):
         import pyglet
         self._pyglet = pyglet
         pyglet.options['audio'] = ('directsound', 'pulse', 'openal')
         self._player = pyglet.media.Player()
-        self._queue = SongQueue(SongProvider(api), load_song)
-        self._load_song = load_song
+        self._api = api
+        self._queue = SongQueue(SongProvider(api))
         self._player.set_handler("on_player_eos", self._on_eos)
         self._current_song = None
         self._on_eos()
 
-    def queue(self, store_id):
-        self._queue.append(store_id)
+    def queue(self, song):
+        self._queue.append(song)
 
     def get_queue(self):
         return self._queue
@@ -127,7 +183,8 @@ class Player(object):
         '''
         if "store_id" in kwargs:
             store_id = kwargs["store_id"]
-            self._queue = list(filter(lambda song: song != store_id))
+            self._queue = list(
+                filter(lambda song: song['store_id'] != store_id))
         elif "queue_position" in kwargs:
             pos = kwargs["queue_position"]
             self._queue.pop(pos)
@@ -157,7 +214,7 @@ class Player(object):
         res = None
         while res is None:
             song = self._queue.pop(0)
-            fname = self._load_song(song)
+            fname = song['load_song']()
             try:
                 res = self._pyglet.media.load(fname)
                 self._current_song = song
