@@ -53,6 +53,7 @@ def start_bot():
         CommandHandler('currentsong', lambda b, u: show_current_song(b, u.message.chat_id)))
     dispatcher.add_handler(
         CommandHandler('clearqueue', lambda b, u: queued_player.clear_queue()))
+    dispatcher.add_handler(CommandHandler('movesong', move_song))
 
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
@@ -62,16 +63,15 @@ def start_bot():
 
 def handle_message(bot, update):
     chat_id = update.message.chat_id
-    if chat_id in skip_keyboard_sent:
+    if chat_id in keyboard_sent:
         text = update.message.text
         if ")" not in text:
             return
         c = text.split(")")[0]
         if str.isdecimal(c):
             i = int(c) - 1
-            queued_player.skip_song(queue_position=i)
-            hide_keyboard(bot, chat_id, get_queue_message())
-            skip_keyboard_sent.remove(chat_id)
+            action = keyboard_sent[chat_id]
+            action(i)
         else:
             print("INVALID CHOICE:", c)
 
@@ -104,32 +104,73 @@ def show_queue(bot, update):
     bot.send_message(
         chat_id=update.message.chat_id, text=message, parse_mode="markdown")
 
-skip_keyboard_sent = set()
+keyboard_sent = {}
+
+
+def send_queue_keyboard(bot, chat_id, message_id, text):
+    queue = queued_player.get_queue()
+    keyboard = []
+    for i in range(0, len(queue)):
+        keyboard.append(["{}) {}".format(i + 1, lookup_song_name(queue[i]))])
+
+    markup = replykeyboardmarkup.ReplyKeyboardMarkup(
+        keyboard, one_time_keyboard=True, resize_keyboard=True)
+
+    bot.send_message(chat_id=chat_id, text=text,
+                     reply_markup=markup, reply_to_message_id=message_id)
 
 
 def skip(bot, update):
     queue = queued_player.get_queue()
-
     if len(queue) == 0:
         bot.send_message(chat_id=update.message.chat_id,
                          text="No songs in queue", reply_to_message_id=update.message.message_id)
         return
 
     chat_id = update.message.chat_id
-    if chat_id in skip_keyboard_sent:
+    if chat_id in keyboard_sent:
         return
 
-    keyboard = []
-    for i in range(0, len(queue)):
-        keyboard.append(["{}) {}".format(i + 1, lookup_song_name(queue[i]))])
+    send_queue_keyboard(bot, chat_id, update.message.message_id, "What song?")
 
-    markup = replykeyboardmarkup.ReplyKeyboardMarkup(
-        keyboard, one_time_keyboard=True)
+    def skip_action(queue_position):
+        queued_player.skip_song(queue_position=queue_position)
+        hide_keyboard(bot, chat_id, get_queue_message())
+        del keyboard_sent[chat_id]
 
-    bot.send_message(chat_id=chat_id, text="What song?",
-                     reply_markup=markup, reply_to_message_id=update.message.message_id)
+    keyboard_sent[chat_id] = skip_action
 
-    skip_keyboard_sent.add(chat_id)
+
+def move_song(bot, update):
+    message = update.message
+    chat_id = message.chat_id
+    queue = queued_player.get_queue()
+
+    if len(queue) <= 1:
+        bot.send_message(chat_id=chat_id,
+                         text="Not >1 songs in queue", reply_to_message_id=message.message_id)
+        return
+
+    if chat_id in keyboard_sent:
+        return
+
+    send_queue_keyboard(
+        bot, chat_id, update.message.message_id, "What song do you want to move?")
+
+    def move_song_first_action(source_position):
+        source = queue[source_position]
+        queue.pop(source_position)
+        send_queue_keyboard(
+            bot, chat_id, message.message_id, "Before what song should it be?")
+
+        def move_song_second_action(target_position):
+            queue.insert(target_position, source)
+            hide_keyboard(bot, chat_id, get_queue_message())
+            del keyboard_sent[chat_id]
+
+        keyboard_sent[chat_id] = move_song_second_action
+
+    keyboard_sent[chat_id] = move_song_first_action
 
 
 def next_song(bot, update):

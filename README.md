@@ -17,6 +17,7 @@ This bot lets users select songs from Google Play Music to play on the bot host 
 * next - skip current song
 * currentsong - shows the name of the currently playing song
 * skip - skip a song in the queue
+* movesong - move a song in the queue
 * showqueue - show current queue
 * clearqueue - clear the current queue
 
