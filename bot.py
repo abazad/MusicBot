@@ -63,7 +63,7 @@ def start_bot():
 
 def start_youtube_bot():
     global youtube_updater
-    updater = Updater(token=youtube_token)
+    youtube_updater = Updater(token=youtube_token)
     dispatcher = updater.dispatcher
 
     dispatcher.add_handler(InlineQueryHandler(get_youtube_inline_handler()))
