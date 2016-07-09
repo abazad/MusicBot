@@ -112,8 +112,8 @@ class Player(object):
         self._queue = SongQueue(SongProvider(api), load_song)
         self._load_song = load_song
         self._player.set_handler("on_player_eos", self._on_eos)
-        self._on_eos()
         self._current_song = None
+        self._on_eos()
 
     def queue(self, store_id):
         self._queue.append(store_id)
