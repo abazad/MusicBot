@@ -6,6 +6,7 @@ import threading
 import time
 import urllib
 import pafy
+from pydub import AudioSegment
 
 
 def get_youtube_loader(video_id):
@@ -13,24 +14,20 @@ def get_youtube_loader(video_id):
         url = "https://www.youtube.com/watch?v=" + video_id
 
         video = pafy.new(url)
-        audios = video.audiostreams
-        audio = None
-        for a in filter(lambda a: a.extension == "m4a", audios):
-            if audio is None:
-                audio = a
-            elif a.bitrate > audio.bitrate:
-                audio = a
-        if audio is None:
-            print("ERROR, NO m4a!")
-            audio = video.getbestaudio()
+        audio = video.getbestaudio()
 
-        fname = "songs/" + video.videoid + "." + audio.extension
-
+        video_fname = "songs/" + video.videoid + "." + audio.extension
+        fname = "songs/" + video.videoid + ".wav"
         if not os.path.isdir("songs"):
             os.mkdir("songs")
 
         if not os.path.isfile(fname):
-            audio.download(filepath=fname, quiet=True)
+            if not os.path.isfile(video_fname):
+                audio.download(filepath=video_fname, quiet=True)
+
+            song = AudioSegment.from_file(video_fname, audio.extension)
+            song.export(fname, "wav")
+            os.remove(video_fname)
 
         return fname
     return _youtube_loader
@@ -38,20 +35,26 @@ def get_youtube_loader(video_id):
 
 def get_gmusic_loader(api, store_id):
     def _gmusic_loader():
-        fname = "songs/" + store_id + '.mp3'
+        mp3_fname = "songs/" + store_id + '.mp3'
+        fname = "songs/" + store_id + ".wav"
 
         if not os.path.isfile(fname):
-            url = api.get_stream_url(store_id)
-            request = urllib.request.Request(url)
-            page = urllib.request.urlopen(request)
+            if not os.path.isfile(mp3_fname):
+                url = api.get_stream_url(store_id)
+                request = urllib.request.Request(url)
+                page = urllib.request.urlopen(request)
 
-            if not os.path.isdir("songs"):
-                os.mkdir("songs")
+                if not os.path.isdir("songs"):
+                    os.mkdir("songs")
 
-            file = open(fname, "wb")
-            file.write(page.read())
-            file.close()
-            page.close()
+                file = open(mp3_fname, "wb")
+                file.write(page.read())
+                file.close()
+                page.close()
+
+            song = AudioSegment.from_mp3(mp3_fname)
+            song.export(fname, "wav")
+            os.remove(mp3_fname)
 
         return fname
     return _gmusic_loader
