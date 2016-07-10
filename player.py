@@ -1,4 +1,3 @@
-import gc
 import json
 import os
 from random import choice
