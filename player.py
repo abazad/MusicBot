@@ -155,9 +155,13 @@ class SongQueue(list):
 
     def append(self, *args, **kwargs):
         song = args[0]
-        fname = song['load_song']()
-        song['load_song'] = lambda: fname
-        list.append(self, *args, **kwargs)
+
+        def _append():
+            fname = song['load_song']()
+            song['load_song'] = lambda: fname
+            list.append(self, *args, **kwargs)
+
+        threading.Thread(target=_append, name="append_thread").start()
 
     def reset(self):
         self._song_provider.reset()
@@ -215,6 +219,7 @@ class Player(object):
 
     def _on_song_end(self):
         song = self._queue.pop(0)
+        self._current_song = song
         fname = song['load_song']()
 
         wave_obj = self._sa.WaveObject.from_wave_file(fname)
