@@ -236,6 +236,13 @@ class Player(object):
             else:
                 if not self._player or not self._player.is_playing():
                     self._on_song_end()
+
+                # prepare the next song
+                next_song = self._queue.pop(0)
+                fname = next_song['load_song']()
+                next_song['load_song'] = lambda: fname
+                self._queue.insert(0, next_song)
+
                 self._player.wait_done()
 
     def close(self):
