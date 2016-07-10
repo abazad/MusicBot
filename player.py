@@ -147,7 +147,8 @@ class SongQueue(list):
         try:
             result = list.pop(self, *args, **kwargs)
             # All gmusic store ids start with T and are 27 chars long
-            if result['store_id'].startswith("T") and len(result['store_id']) == 27:
+            store_id = result['store_id']
+            if store_id.startswith("T") and len(store_id) == 27:
                 self._song_provider.add_played(result)
         except IndexError:
             result = self._song_provider.get_song()
