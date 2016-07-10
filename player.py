@@ -144,10 +144,12 @@ class SongQueue(list):
         self._semaphore = threading.Semaphore()
 
     def _prepare_next(self):
+        print("PREPARING")
         next_song = self._song_provider.get_song()
         fname = next_song['load_song']()
         next_song['load_song'] = lambda: fname
         self._next_random = next_song
+        print("FINISHED PREPARING")
 
     def pop(self, *args, **kwargs):
         result = None
@@ -175,9 +177,11 @@ class SongQueue(list):
         song = args[0]
 
         def _append():
+            print("LOADING APPENDED SONG")
             fname = song['load_song']()
             song['load_song'] = lambda: fname
             list.append(self, *args, **kwargs)
+            print("FINISHED LOADING APPENDED SONG")
 
         threading.Thread(target=_append, name="append_thread").start()
 
