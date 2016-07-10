@@ -205,7 +205,7 @@ class Player(object):
         self._pause = False
 
     def next(self):
-        self._player.stop()
+        self._on_song_end()
 
     def reset(self):
         self._queue.reset()
@@ -223,7 +223,11 @@ class Player(object):
         fname = song['load_song']()
 
         wave_obj = self._sa.WaveObject.from_wave_file(fname)
+        self._pause = True
+        if self._player:
+            self._player.stop()
         self._player = wave_obj.play()
+        self._pause = False
 
     def run(self):
         while not self._stop:
