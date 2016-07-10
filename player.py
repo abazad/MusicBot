@@ -231,5 +231,6 @@ class Player(object):
                 self._player = None
 
     def close(self):
-        self._player.stop()
         self._stop = True
+        if self._player:
+            self._player.stop()
