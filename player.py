@@ -151,11 +151,10 @@ class SongQueue(list):
         return result
 
     def append(self, *args, **kwargs):
-        result = list.append(self, *args, **kwargs)
-
-        threading.Thread(
-            target=args[0]['load_song'], name="song_loader").start()
-        return result
+        song = args[0]
+        fname = song['load_song']()
+        song['load_song'] = lambda: fname
+        list.append(self, *args, **kwargs)
 
     def reset(self):
         self._song_provider.reset()
