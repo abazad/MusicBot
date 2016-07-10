@@ -166,15 +166,14 @@ class SongQueue(list):
 class Player(object):
 
     def __init__(self, api):
-        import pyglet
-        self._pyglet = pyglet
-        pyglet.options['audio'] = ('directsound', 'pulse', 'openal')
-        self._player = pyglet.media.Player()
+        import simpleaudio
+        self._sa = simpleaudio
+        self._player = None
+        self._stop = False
+        self._pause = False
         self._api = api
         self._queue = SongQueue(SongProvider(api))
-        self._player.set_handler("on_player_eos", self._on_eos)
         self._current_song = None
-        self._on_eos()
 
     def queue(self, song):
         self._queue.append(song)
@@ -195,17 +194,18 @@ class Player(object):
             self._queue.pop(pos)
 
     def pause(self):
-        self._player.pause()
+        self._pause = True
+        self._player.stop()
 
     def resume(self):
-        self._player.play()
+        self._pause = False
 
     def next(self):
-        self._player.next_source()
+        self._player.stop()
 
     def reset(self):
         self._queue.reset()
-        self._player.delete()
+        self._player.stop()
 
     def get_current_song(self):
         return self._current_song
@@ -213,40 +213,23 @@ class Player(object):
     def clear_queue(self):
         self._queue.clear()
 
-    def _on_eos(self):
-        from pyglet.media import MediaFormatException
+    def _on_song_end(self):
+        song = self._queue.pop(0)
+        fname = song['load_song']()
 
-        res = None
-        while res is None:
-            song = self._queue.pop(0)
-            fname = song['load_song']()
-            try:
-                res = self._pyglet.media.load(fname)
-                self._current_song = song
-            except MediaFormatException:
-                gc.collect()
-
-                # There is no way to let pyglet close the file so yeah... this
-                # is the "solution" for now
-                # Who doesn't love "temporary" hacks?
-                def _try_delete():
-                    attempts = 20
-                    while attempts > 0:
-                        try:
-                            os.remove(fname)
-                            break
-                        except:
-                            time.sleep(15)
-                            attempts -= 1
-                threading.Thread(
-                    name="delete_thread_" + fname, target=_try_delete).start()
-
-        self._player.queue(res)
-        self._player.play()
+        wave_obj = self._sa.WaveObject.from_wave_file(fname)
+        self._player = wave_obj.play()
 
     def run(self):
-        self._pyglet.app.run()
+        while not self._stop:
+            if self._pause:
+                time.sleep(1)
+            elif not self._player:
+                self._on_song_end()
+            else:
+                self._player.wait_done()
+                self._player = None
 
     def close(self):
-        self._player.delete()
-        self._pyglet.app.exit()
+        self._player.stop()
+        self._stop = True
