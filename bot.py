@@ -64,12 +64,11 @@ def start_bot():
 def start_youtube_bot():
     global youtube_updater
     youtube_updater = Updater(token=youtube_token)
-    dispatcher = updater.dispatcher
+    dispatcher = youtube_updater.dispatcher
 
     dispatcher.add_handler(InlineQueryHandler(get_youtube_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(youtube_queue))
-
-    updater.start_polling()
+    youtube_updater.start_polling()
 
 
 def handle_message(bot, update):
