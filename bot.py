@@ -186,8 +186,8 @@ def move_song(bot, update):
 
 def next_song(bot, update):
     queued_player.next()
-    message = update.message
-    show_current_song(bot, message.chat_id)
+    #message = update.message
+    #show_current_song(bot, message.chat_id)
 
 
 def show_current_song(bot, chat_id):

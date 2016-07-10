@@ -4,6 +4,7 @@ from random import choice
 import threading
 import time
 import urllib
+
 import pafy
 from pydub import AudioSegment
 
@@ -139,6 +140,14 @@ class SongQueue(list):
 
     def __init__(self, song_provider):
         self._song_provider = song_provider
+        self._prepare_next()
+        self._semaphore = threading.Semaphore()
+
+    def _prepare_next(self):
+        next_song = self._song_provider.get_song()
+        fname = next_song['load_song']()
+        next_song['load_song'] = lambda: fname
+        self._next_random = next_song
 
     def pop(self, *args, **kwargs):
         result = None
@@ -150,7 +159,16 @@ class SongQueue(list):
             if store_id.startswith("T") and len(store_id) == 27:
                 self._song_provider.add_played(result)
         except IndexError:
-            result = self._song_provider.get_song()
+            while self._next_random is None:
+                time.sleep(0.2)
+            self._semaphore.acquire()
+            if self._next_random is not None:
+                result = self._next_random
+                self._next_random = None
+                threading.Thread(
+                    target=lambda: self._prepare_next(), name="prepare_thread").start()
+            self._semaphore.release()
+
         return result
 
     def append(self, *args, **kwargs):
@@ -199,13 +217,15 @@ class Player(object):
 
     def pause(self):
         self._pause = True
-        self._player.stop()
+        if self._player:
+            self._player.stop()
 
     def resume(self):
         self._pause = False
 
     def next(self):
-        self._on_song_end()
+        if self._player:
+            self._player.stop()
 
     def reset(self):
         self._queue.reset()
@@ -222,27 +242,17 @@ class Player(object):
         fname = song['load_song']()
 
         wave_obj = self._sa.WaveObject.from_wave_file(fname)
-        self._pause = True
         if self._player:
             self._player.stop()
         self._player = wave_obj.play()
         self._current_song = song
-        self._pause = False
 
     def run(self):
         while not self._stop:
             if self._pause:
                 time.sleep(1)
             else:
-                if not self._player or not self._player.is_playing():
-                    self._on_song_end()
-
-                # prepare the next song
-                next_song = self._queue.pop(0)
-                fname = next_song['load_song']()
-                next_song['load_song'] = lambda: fname
-                self._queue.insert(0, next_song)
-
+                self._on_song_end()
                 self._player.wait_done()
 
     def close(self):
