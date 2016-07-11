@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from random import choice
@@ -69,6 +70,7 @@ class SongProvider(object):
         self._station_id = None
         self._last_played = []
         self._try_restore_ids()
+        self._playlist_entries = self._get_playlist_entries()
 
     def get_song(self):
         self._create_playlist()
@@ -94,7 +96,11 @@ class SongProvider(object):
     def add_played(self, song):
         self._create_playlist()
         store_id = song['store_id']
-        self._api.add_songs_to_playlist(self._playlist_id, store_id)
+
+        if store_id not in self._playlist_entries:
+            self._api.add_songs_to_playlist(self._playlist_id, store_id)
+            self._playlist_entries.add(store_id)
+
         self._last_played.append(store_id)
         if len(self._last_played) > 20:
             self._last_played = self._last_played[-20::]
@@ -106,6 +112,26 @@ class SongProvider(object):
             playlist = list(filter(
                 lambda p: p['id'] == self._playlist_id, self._api.get_all_playlists()))[0]
             self._playlist_token = playlist['shareToken']
+
+    def _get_playlist_entries(self):
+        self._create_playlist()
+        playlist_contents = self._api.get_all_user_playlist_contents()
+
+        result = set()
+
+        tracks = None
+        for playlist in playlist_contents:
+            if playlist['id'] == self._playlist_id:
+                tracks = playlist['tracks']
+
+        if not tracks:
+            print("INVALID PLAYLIST")
+            return
+
+        for track in tracks:
+            result.add(track['track']['storeId'])
+
+        return result
 
     def _create_station(self):
         if not self._station_id:
