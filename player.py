@@ -161,14 +161,13 @@ class SongQueue(list):
             if store_id.startswith("T") and len(store_id) == 27:
                 self._song_provider.add_played(result)
         except IndexError:
-            while self._next_random is None:
-                time.sleep(0.2)
-            self._semaphore.acquire()
-            if self._next_random is not None:
+            if self._semaphore.acquire(blocking=False):
+                while self._next_random is None:
+                    time.sleep(0.2)
                 result = self._next_random
                 self._next_random = None
                 threading.Thread(
-                    target=lambda: self._prepare_next(), name="prepare_thread").start()
+                    target=self._prepare_next, name="prepare_thread").start()
             self._semaphore.release()
 
         return result
@@ -200,6 +199,8 @@ class Player(object):
         self._api = api
         self._queue = SongQueue(SongProvider(api))
         self._current_song = None
+        self._semaphore = threading.Semaphore()
+        self._barrier = threading.Barrier(2)
 
     def queue(self, song):
         self._queue.append(song)
@@ -228,8 +229,7 @@ class Player(object):
         self._pause = False
 
     def next(self):
-        if self._player:
-            self._player.stop()
+        self._on_song_end()
 
     def reset(self):
         self._queue.reset()
@@ -242,7 +242,13 @@ class Player(object):
         self._queue.clear()
 
     def _on_song_end(self):
+        if not self._semaphore.acquire(blocking=False):
+            if threading.current_thread().name != "dispatcher":
+                self._barrier.wait()
+            return
         song = self._queue.pop(0)
+        if not song:
+            return
         fname = song['load_song']()
 
         wave_obj = self._sa.WaveObject.from_wave_file(fname)
@@ -250,6 +256,9 @@ class Player(object):
             self._player.stop()
         self._player = wave_obj.play()
         self._current_song = song
+        if threading.current_thread().name == "dispatcher":
+            self._barrier.wait()
+        self._semaphore.release()
 
     def run(self):
         while not self._stop:
