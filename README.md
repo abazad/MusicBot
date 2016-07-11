@@ -23,7 +23,11 @@ This bot lets users select songs from Google Play Music to play on the bot host 
 
 ## Dependencies:
   - [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
-  - [gmusicapi](https://github.com/simon-weber/gmusicapi)
+  - [gmusicapi](https://github.com/simon-weber/gmusicapi) (needs libssl-dev and libav or ffmpeg)
+  - [pafy](https://github.com/mps-youtube/pafy)
+  - [youtube-dl](https://github.com/rg3/youtube-dl)
+  - [pydub](https://github.com/jiaaro/pydub) (needs libav or ffmpeg "apt-get install libav-tools libavcodec-extra-5x")
+  - [simpleaudio](https://github.com/hamiltron/py-simple-audio) (needs alsa, "apt-get install libasound2-dev")
   
 ## Contributions:
 All contributions are welcome, please make pull requests against the dev branch
