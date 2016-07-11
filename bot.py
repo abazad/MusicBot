@@ -185,9 +185,11 @@ def move_song(bot, update):
 
 
 def next_song(bot, update):
-    queued_player.next()
-    message = update.message
-    show_current_song(bot, message.chat_id)
+    def _next_job():
+        queued_player.next()
+        message = update.message
+        show_current_song(bot, message.chat_id)
+    threading.Thread(target=_next_job, name="next_thread").start()
 
 
 def show_current_song(bot, chat_id):

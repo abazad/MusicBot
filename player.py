@@ -243,7 +243,7 @@ class Player(object):
 
     def _on_song_end(self):
         if not self._semaphore.acquire(blocking=False):
-            if threading.current_thread().name != "dispatcher":
+            if threading.current_thread().name != "next_thread":
                 self._barrier.wait()
             return
         song = self._queue.pop(0)
@@ -256,7 +256,7 @@ class Player(object):
             self._player.stop()
         self._player = wave_obj.play()
         self._current_song = song
-        if threading.current_thread().name == "dispatcher":
+        if threading.current_thread().name == "next_thread":
             self._barrier.wait()
         self._semaphore.release()
 
