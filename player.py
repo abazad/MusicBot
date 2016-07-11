@@ -247,7 +247,7 @@ class Player(object):
                 self._barrier.wait()
             return
         song = self._queue.pop(0)
-        if not song:
+        if not song or self._stop:
             return
         fname = song['load_song']()
 
