@@ -55,9 +55,6 @@ def get_gmusic_loader(api, store_id):
         fname = "songs/" + store_id + ".wav"
 
         if not os.path.isfile(fname):
-            start_time = datetime.now()
-            download_time = datetime.now()
-            download_time = download_time - download_time
             if not os.path.isfile(mp3_fname):
                 download_semaphore.acquire()
                 url = api.get_stream_url(store_id)
@@ -72,18 +69,12 @@ def get_gmusic_loader(api, store_id):
                 file.close()
                 page.close()
                 download_semaphore.release()
-                download_time = datetime.now() - start_time
 
             convert_semaphore.acquire()
             song = AudioSegment.from_mp3(mp3_fname)
             song.export(fname, "wav")
             os.remove(mp3_fname)
             convert_semaphore.release()
-
-            convert_time = datetime.now() - (start_time + download_time)
-            total = datetime.now() - start_time
-            print("Took {} in total. Download: {}, Convert: {}".format(
-                total, download_time, convert_time))
 
         return fname
     return _gmusic_loader
