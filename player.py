@@ -35,13 +35,21 @@ def get_youtube_loader(video_id):
         if not os.path.isfile(fname):
             if not os.path.isfile(video_fname):
                 download_semaphore.acquire()
-                audio.download(filepath=video_fname, quiet=True)
+                video_fname_tmp = video_fname + ".tmp"
+                if os.path.isfile(video_fname_tmp):
+                    os.remove(video_fname_tmp)
+                audio.download(filepath=video_fname_tmp, quiet=True)
+                os.rename(video_fname_tmp, video_fname)
                 download_semaphore.release()
 
             convert_semaphore.acquire()
             song = AudioSegment.from_file(video_fname, audio.extension)
-            song.export(fname, "wav")
+            fname_tmp = fname + ".tmp"
+            if os.path.isfile(fname_tmp):
+                os.remove(fname_tmp)
+            song.export(fname_tmp, "wav")
             os.remove(video_fname)
+            os.rename(fname_tmp, fname)
             convert_semaphore.release()
 
         return fname
@@ -63,16 +71,25 @@ def get_gmusic_loader(api, store_id):
                 if not os.path.isdir("songs"):
                     os.mkdir("songs")
 
-                file = open(mp3_fname, "wb")
+                mp3_fname_tmp = mp3_fname + ".tmp"
+                if os.path.isfile(mp3_fname_tmp):
+                    os.remove(mp3_fname_tmp)
+
+                file = open(mp3_fname_tmp, "wb")
                 file.write(page.read())
                 file.close()
                 page.close()
+                os.rename(mp3_fname_tmp, mp3_fname)
                 download_semaphore.release()
 
             convert_semaphore.acquire()
             song = AudioSegment.from_mp3(mp3_fname)
-            song.export(fname, "wav")
+            fname_tmp = fname + ".tmp"
+            if os.path.isfile(fname_tmp):
+                os.remove(fname_tmp)
+            song.export(fname_tmp, "wav")
             os.remove(mp3_fname)
+            os.rename(fname_tmp, fname)
             convert_semaphore.release()
 
         return fname
