@@ -18,6 +18,8 @@ max_conversions = config['max_conversions']
 download_semaphore = threading.Semaphore(max_downloads)
 convert_semaphore = threading.Semaphore(max_conversions)
 
+config_file.close()
+
 
 def get_youtube_loader(video_id):
     def _youtube_loader():
