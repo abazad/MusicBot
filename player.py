@@ -134,12 +134,10 @@ class SongProvider(object):
                 tracks = playlist['tracks']
 
         if not tracks:
-            print("INVALID PLAYLIST")
-            return
+            return result
 
         for track in tracks:
             result.add(track['track']['storeId'])
-
         return result
 
     def _create_station(self):
