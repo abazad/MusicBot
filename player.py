@@ -1,3 +1,4 @@
+from _datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 import json
 import os
@@ -40,6 +41,9 @@ def get_gmusic_loader(api, store_id):
         fname = "songs/" + store_id + ".wav"
 
         if not os.path.isfile(fname):
+            start_time = datetime.now()
+            download_time = datetime.now()
+            download_time = download_time - download_time
             if not os.path.isfile(mp3_fname):
                 url = api.get_stream_url(store_id)
                 request = urllib.request.Request(url)
@@ -52,10 +56,15 @@ def get_gmusic_loader(api, store_id):
                 file.write(page.read())
                 file.close()
                 page.close()
+                download_time = datetime.now() - start_time
 
             song = AudioSegment.from_mp3(mp3_fname)
             song.export(fname, "wav")
             os.remove(mp3_fname)
+            convert_time = datetime.now() - (start_time + download_time)
+            total = datetime.now() - start_time
+            print("Took {} in total. Download: {}, Convert: {}".format(
+                total, download_time, convert_time))
 
         return fname
     return _gmusic_loader
