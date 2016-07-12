@@ -1,5 +1,4 @@
 from _datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from random import choice
@@ -9,6 +8,10 @@ import urllib
 
 import pafy
 from pydub import AudioSegment
+
+
+download_semaphore = threading.Semaphore(2)
+convert_semaphore = threading.Semaphore(1)
 
 
 def get_youtube_loader(video_id):
@@ -25,11 +28,15 @@ def get_youtube_loader(video_id):
 
         if not os.path.isfile(fname):
             if not os.path.isfile(video_fname):
+                download_semaphore.acquire()
                 audio.download(filepath=video_fname, quiet=True)
+                download_semaphore.release()
 
+            convert_semaphore.acquire()
             song = AudioSegment.from_file(video_fname, audio.extension)
             song.export(fname, "wav")
             os.remove(video_fname)
+            convert_semaphore.release()
 
         return fname
     return _youtube_loader
@@ -45,6 +52,7 @@ def get_gmusic_loader(api, store_id):
             download_time = datetime.now()
             download_time = download_time - download_time
             if not os.path.isfile(mp3_fname):
+                download_semaphore.acquire()
                 url = api.get_stream_url(store_id)
                 request = urllib.request.Request(url)
                 page = urllib.request.urlopen(request)
@@ -56,11 +64,15 @@ def get_gmusic_loader(api, store_id):
                 file.write(page.read())
                 file.close()
                 page.close()
+                download_semaphore.release()
                 download_time = datetime.now() - start_time
 
+            convert_semaphore.acquire()
             song = AudioSegment.from_mp3(mp3_fname)
             song.export(fname, "wav")
             os.remove(mp3_fname)
+            convert_semaphore.release()
+
             convert_time = datetime.now() - (start_time + download_time)
             total = datetime.now() - start_time
             print("Took {} in total. Download: {}, Convert: {}".format(
