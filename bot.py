@@ -2,6 +2,7 @@ import json
 import signal
 import sys
 import threading
+from time import sleep
 
 from gmusicapi.clients.mobileclient import Mobileclient
 import pafy
@@ -360,12 +361,12 @@ youtube_bot_thread.start()
 exiting = False
 
 
-def exit_bot(signum=None, frame=None):
+def exit_bot():
     global exiting
     if exiting:
         return
     exiting = True
-    print("EXITING {} ...".format(signum))
+    print("EXITING {} ...")
     updater.stop()
     youtube_updater.stop()
     queued_player.close()
@@ -379,25 +380,7 @@ def reset_bot():
     queued_player.reset()
     exit_bot()
 
-
-def listen_exit():
-    signal.signal(signal.SIGTERM, exit_bot)
-    signal.signal(signal.SIGINT, exit_bot)
-    signal.signal(signal.SIGABRT, exit_bot)
-
-listen_exit()
-print("RUNNING")
-while 1:
-    try:
-        input_str = input("")
-        if input_str.lower() == "exit":
-            exit_bot()
-        if input_str.lower() == "reset":
-            reset_bot()
-    except SystemExit:
-        break
-    except EOFError:
-        if exiting:
-            break
-        else:
-            print("Try again?")
+while(updater is None):
+    sleep(1)
+updater.idle()
+exit_bot()
