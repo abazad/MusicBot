@@ -9,9 +9,14 @@ import urllib
 import pafy
 from pydub import AudioSegment
 
+config_file = open("config.json", "r")
+config = json.loads(config_file.read())
 
-download_semaphore = threading.Semaphore(2)
-convert_semaphore = threading.Semaphore(1)
+max_downloads = config['max_downloads']
+max_conversions = config['max_conversions']
+
+download_semaphore = threading.Semaphore(max_downloads)
+convert_semaphore = threading.Semaphore(max_conversions)
 
 
 def get_youtube_loader(video_id):
