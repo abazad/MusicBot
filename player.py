@@ -13,6 +13,7 @@ config = json.loads(config_file.read())
 
 max_downloads = config['max_downloads']
 max_conversions = config['max_conversions']
+quality = config['quality']
 
 download_semaphore = threading.Semaphore(max_downloads)
 convert_semaphore = threading.Semaphore(max_conversions)
@@ -64,7 +65,7 @@ def get_gmusic_loader(api, store_id):
         if not os.path.isfile(fname):
             if not os.path.isfile(mp3_fname):
                 download_semaphore.acquire()
-                url = api.get_stream_url(store_id)
+                url = api.get_stream_url(store_id, quality=quality)
                 request = urllib.request.Request(url)
                 page = urllib.request.urlopen(request)
 

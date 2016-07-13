@@ -1,5 +1,6 @@
 {
     "max_downloads" : 2,
-    "max_conversions": 1
+    "max_conversions": 1,
+    "quality": "med"
 }
 
