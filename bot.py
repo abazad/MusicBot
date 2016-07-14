@@ -56,6 +56,7 @@ def start_bot():
     dispatcher.add_handler(CommandHandler('movesong', move_song))
     dispatcher.add_handler(CommandHandler('admin', set_admin))
     dispatcher.add_handler(CommandHandler('reset', reset_bot))
+    dispatcher.add_handler(CommandHandler('exit', lambda b, u: exit_bot()))
 
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
@@ -387,30 +388,38 @@ def run_player():
     queued_player.run()
 
 player_thread = threading.Thread(target=run_player, name="player_thread")
-bot_thread = threading.Thread(target=start_bot, name="bot_thread")
-youtube_bot_thread = threading.Thread(
-    target=start_youtube_bot, name="youtube_bot_thread")
+start_bot()
+start_youtube_bot()
 player_thread.start()
-bot_thread.start()
-youtube_bot_thread.start()
 
 exiting = False
 
 
+exit_semaphore = threading.Semaphore(1)
+
+
 def exit_bot():
+    exit_semaphore.acquire()
     global exiting
     if exiting:
         return
     exiting = True
-    print("EXITING {} ...")
-    updater.stop()
-    youtube_updater.stop()
-    queued_player.close()
-    api.logout()
+    exit_semaphore.release()
 
-    print("EXIT")
-    sys.exit(0)
-
+    def exit_job():
+        print("EXITING ...")
+        updater.stop()
+        print("Updater stopped")
+        youtube_updater.stop()
+        print("Youtube updater stopped")
+        queued_player.close()
+        print("Player closed")
+        api.logout()
+        print("EXIT")
+        sys.exit(0)
+    # There is a bug in python-telegram-bot that causes a deadlock if
+    # updater.stop() is called from a handler...
+    threading.Thread(target=exit_job, name="EXIT_THREAD").start()
 
 while(updater is None):
     sleep(1)
