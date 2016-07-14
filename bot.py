@@ -395,16 +395,15 @@ player_thread.start()
 exiting = False
 
 
-exit_semaphore = threading.Semaphore(1)
+exit_lock = threading.Lock()
 
 
 def exit_bot():
-    exit_semaphore.acquire()
-    global exiting
-    if exiting:
-        return
-    exiting = True
-    exit_semaphore.release()
+    with exit_lock:
+        global exiting
+        if exiting:
+            return
+        exiting = True
 
     def exit_job():
         print("EXITING ...")

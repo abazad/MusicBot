@@ -201,7 +201,7 @@ class SongQueue(list):
     def __init__(self, song_provider):
         self._song_provider = song_provider
         self._prepare_next()
-        self._semaphore = threading.Semaphore()
+        self._lock = threading.Lock()
 
     def _prepare_next(self):
         print("PREPARING")
@@ -221,14 +221,14 @@ class SongQueue(list):
             if store_id.startswith("T") and len(store_id) == 27:
                 self._song_provider.add_played(result)
         except IndexError:
-            if self._semaphore.acquire(blocking=False):
+            if self._lock.acquire(blocking=False):
                 while self._next_random is None:
                     time.sleep(0.2)
                 result = self._next_random
                 self._next_random = None
                 threading.Thread(
                     target=self._prepare_next, name="prepare_thread").start()
-            self._semaphore.release()
+            self._lock.release()
 
         return result
 
@@ -259,7 +259,7 @@ class Player(object):
         self._api = api
         self._queue = SongQueue(SongProvider(api))
         self._current_song = None
-        self._semaphore = threading.Semaphore()
+        self._lock = threading.Lock()
         self._barrier = threading.Barrier(2)
 
     def queue(self, song):
@@ -302,7 +302,7 @@ class Player(object):
         self._queue.clear()
 
     def _on_song_end(self):
-        if not self._semaphore.acquire(blocking=False):
+        if not self._lock.acquire(blocking=False):
             if threading.current_thread().name != "next_thread":
                 self._barrier.wait()
             return
@@ -318,7 +318,7 @@ class Player(object):
         self._current_song = song
         if threading.current_thread().name == "next_thread":
             self._barrier.wait()
-        self._semaphore.release()
+        self._lock.release()
 
     def run(self):
         while not self._stop:
