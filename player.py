@@ -228,7 +228,7 @@ class SongQueue(list):
                 self._next_random = None
                 threading.Thread(
                     target=self._prepare_next, name="prepare_thread").start()
-            self._lock.release()
+                self._lock.release()
 
         return result
 
