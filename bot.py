@@ -1,6 +1,7 @@
 import json
 from os import path
 from signal import SIGTERM
+import socket
 import sys
 import threading
 from time import sleep
@@ -60,6 +61,7 @@ def start_bot():
     dispatcher.add_handler(CommandHandler('admin', set_admin))
     dispatcher.add_handler(CommandHandler('reset', reset_bot))
     dispatcher.add_handler(CommandHandler('exit', lambda b, u: exit_bot()))
+    dispatcher.add_handler(CommandHandler('ip', send_ip))
 
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
@@ -367,6 +369,18 @@ def reset_bot(bot, update):
         save_config(('admin_chat_id', 0))
         queued_player.reset()
         exit_bot()
+
+
+def get_ip_address():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    return s.getsockname()[0]
+
+
+def send_ip(bot, update):
+    if update.message.chat_id == admin_chat_id:
+        text = "IP-Address: {}".format(get_ip_address())
+        bot.send_message(text=text, chat_id=admin_chat_id)
 
 
 config_file = open("config.json", "r")
