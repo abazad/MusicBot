@@ -399,16 +399,18 @@ exiting = False
 exit_lock = threading.Lock()
 
 
-def exit_bot():
+def exit_bot(updater_stopped=False):
     with exit_lock:
         global exiting
         if exiting:
+            print("ALREADY EXITING")
             return
         exiting = True
 
     def exit_job():
         print("EXITING ...")
-        updater.signal_handler(signum=SIGTERM, frame=None)
+        if not updater_stopped:
+            updater.signal_handler(signum=SIGTERM, frame=None)
         print("Updater stopped")
         youtube_updater.stop()
         print("Youtube updater stopped")
@@ -423,5 +425,8 @@ def exit_bot():
 
 while(updater is None or youtube_updater is None):
     sleep(1)
-updater.idle()
-exit_bot()
+try:
+    updater.idle()
+except InterruptedError:
+    pass
+exit_bot(True)
