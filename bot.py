@@ -54,6 +54,8 @@ def start_bot():
     dispatcher.add_handler(
         CommandHandler('clearqueue', lambda b, u: queued_player.clear_queue()))
     dispatcher.add_handler(CommandHandler('movesong', move_song))
+    dispatcher.add_handler(CommandHandler('admin', set_admin))
+    dispatcher.add_handler(CommandHandler('reset', reset_bot))
 
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
@@ -332,7 +334,42 @@ def youtube_queue(bot, update):
         video_id), 'name': song_name})
     print("YT_QUEUED by", user["first_name"], ":", song_name)
 
+
+def save_config(*args):
+    config_file = open('config.json', 'r')
+    config = json.loads(config_file.read())
+    config_file.close()
+    for key, value in args:
+        config[key] = value
+    config_file = open('config.json', 'w')
+    config_file.write(json.dumps(config, indent=4, sort_keys=True))
+
+
+def set_admin(bot, update):
+    global admin_chat_id
+    chat_id = update.message.chat_id
+    if not admin_chat_id:
+        admin_chat_id = chat_id
+        save_config(('admin_chat_id', admin_chat_id))
+        bot.send_message(text="You're admin now!", chat_id=chat_id)
+    elif chat_id == admin_chat_id:
+        bot.send_message(text="You already are admin!", chat_id=chat_id)
+    else:
+        bot.send_message(text="There can be only one!", chat_id=chat_id)
+
+
+def reset_bot(bot, update):
+    if update.message.chat_id == admin_chat_id:
+        save_config(('admin_chat_id', 0))
+        queued_player.reset()
+        exit_bot()
+
 user, password, device_id, token, youtube_token, youtube_api_key = read_secrets()
+
+config_file = open("config.json", "r")
+config = json.loads(config_file.read())
+admin_chat_id = config.get('admin_chat_id', 0)
+config_file.close()
 
 api = Mobileclient(debug_logging=False)
 if not api.login(user, password, device_id, "de_DE"):
@@ -374,10 +411,6 @@ def exit_bot():
     print("EXIT")
     sys.exit(0)
 
-
-def reset_bot():
-    queued_player.reset()
-    exit_bot()
 
 while(updater is None):
     sleep(1)
