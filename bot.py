@@ -1,5 +1,4 @@
 import json
-import signal
 import sys
 import threading
 from time import sleep
