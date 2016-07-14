@@ -1,4 +1,5 @@
 import json
+from signal import SIGTERM
 import sys
 import threading
 from time import sleep
@@ -407,7 +408,7 @@ def exit_bot():
 
     def exit_job():
         print("EXITING ...")
-        updater.stop()
+        updater.signal_handler(signum=SIGTERM, frame=None)
         print("Updater stopped")
         youtube_updater.stop()
         print("Youtube updater stopped")
@@ -420,7 +421,7 @@ def exit_bot():
     # updater.stop() is called from a handler...
     threading.Thread(target=exit_job, name="EXIT_THREAD").start()
 
-while(updater is None):
+while(updater is None or youtube_updater is None):
     sleep(1)
 updater.idle()
 exit_bot()
