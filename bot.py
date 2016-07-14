@@ -1,4 +1,5 @@
 import json
+from os import path
 from signal import SIGTERM
 import sys
 import threading
@@ -22,7 +23,8 @@ def pretty(some_map):
 
 
 def read_secrets():
-    secrets = open("secrets.json", "r")
+    secrets_path = path.join(secrets_location, "secrets.json")
+    secrets = open(secrets_path, "r")
     content = secrets.read()
     secrets.close()
     content = json.loads(content)
@@ -366,12 +368,15 @@ def reset_bot(bot, update):
         queued_player.reset()
         exit_bot()
 
-user, password, device_id, token, youtube_token, youtube_api_key = read_secrets()
 
 config_file = open("config.json", "r")
 config = json.loads(config_file.read())
 admin_chat_id = config.get('admin_chat_id', 0)
+secrets_location = config.get('secrets_location', "")
 config_file.close()
+
+user, password, device_id, token, youtube_token, youtube_api_key = read_secrets()
+
 
 api = Mobileclient(debug_logging=False)
 if not api.login(user, password, device_id, "de_DE"):

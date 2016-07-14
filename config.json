@@ -2,6 +2,7 @@
     "max_downloads" : 2,
     "max_conversions": 1,
     "quality": "med",
-    "admin_chat_id": 0
+    "admin_chat_id": 0,
+    "secrets_location": ""
 }
 
