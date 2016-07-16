@@ -68,6 +68,7 @@ def start_bot():
     dispatcher.add_handler(CommandHandler('togglepassword', toggle_password))
     dispatcher.add_handler(CommandHandler('setpassword', set_password))
     dispatcher.add_handler(CommandHandler('banuser', ban_user))
+    dispatcher.add_handler(CommandHandler('setquality', set_quality))
 
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
@@ -574,6 +575,25 @@ def ban_user(bot, update):
 
     bot.send_message(chat_id=chat_id, text="Who should be banned?",
                      reply_markup=markup, reply_to_message_id=update.message.message_id)
+
+
+@_admin
+def set_quality(bot, update):
+    chat_id = update.message.chat_id
+    split = update.message.text.split(" ")
+    if len(split) < 2:
+        bot.send_message(
+            chat_id=chat_id, text="Usage: /setquality [hi/med/low]")
+        return
+
+    quality = split[1]
+    if quality in ["hi", "med", "low"]:
+        player.quality = quality
+        save_config(("quality", quality))
+        bot.send_message(chat_id=chat_id, text="Successfully changes quality")
+    else:
+        bot.send_message(chat_id=chat_id, text="Invalid quality")
+        return
 
 
 exiting = False

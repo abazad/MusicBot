@@ -32,6 +32,7 @@ This bot lets users select songs from Google Play Music to play on the bot host 
 * /togglepassword - toggles the session password
 * /setpassword [password] - sets the session password
 * /banuser - bans a user from the current session and resets the password
+* /setquality [hi/med/low] - sets the gmusic song quality
 
 ## Dependencies:
   - [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
