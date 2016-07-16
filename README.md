@@ -3,6 +3,8 @@ This bot lets users select songs from Google Play Music to play on the bot host 
 
 ## Installation:
 - Works with Python 3+
+- Should be completely platform independent, as long as all dependencies are available
+  - tested on Raspbian, Ubuntu, Windows
 - You'll need to provide in the secrets.json:
   - your Google username/email and password
   - your android device id from a phone you accessed play music on once
@@ -12,18 +14,25 @@ This bot lets users select songs from Google Play Music to play on the bot host 
     - this bot does not work well in groups, so disable /setjoingroups
 
 ## Commands:
-* pause - pause playback
-* play - resume playback
-* next - skip current song
-* currentsong - shows the name of the currently playing song
-* skip - skip a song in the queue
-* movesong - move a song in the queue
-* showqueue - show current queue
-* clearqueue - clear the current queue
+* /currentsong - shows the name of the currently playing song
+* /showqueue - show current queue
+* /next - skip current song
+* /movesong - move a song in the queue
+* /skip - skip a song in the queue
+* /cancel - hide the reply keyboard
+* /pause - pause playback
+* /play - resume playback
+
+### Admin commands (should not be sent to the botfather)
+* /admin - register as admin (only possible once)
+* /clearqueue - clear the current queue
+* /ip - get the bot's local IP address
+* /reset - delete the BotPlaylist and BotStation on google play music, reset the admin setting and stop the bot
+* /stop - stop the bot
 
 ## Dependencies:
   - [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
-  - [gmusicapi](https://github.com/simon-weber/gmusicapi) (needs libssl-dev and libav or ffmpeg)
+  - [gmusicapi](https://github.com/simon-weber/gmusicapi) (needs libssl-dev, libffi-dev and libav or ffmpeg)
   - [pafy](https://github.com/mps-youtube/pafy)
   - [youtube-dl](https://github.com/rg3/youtube-dl)
   - [pydub](https://github.com/jiaaro/pydub) (needs libav or ffmpeg "apt-get install libav-tools libavcodec-extra-5x")
