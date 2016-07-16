@@ -61,6 +61,7 @@ def start_bot():
     dispatcher.add_handler(CommandHandler('reset', reset_bot))
     dispatcher.add_handler(CommandHandler('exit', lambda b, u: exit_bot()))
     dispatcher.add_handler(CommandHandler('ip', send_ip))
+    dispatcher.add_handler(CommandHandler('cancel', cancel_keyboard))
 
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
@@ -97,6 +98,12 @@ def hide_keyboard(bot, chat_id, message):
     markup = replykeyboardhide.ReplyKeyboardHide()
     bot.send_message(
         chat_id=chat_id, text=message, reply_markup=markup, parse_mode="markdown")
+
+
+def cancel_keyboard(bot, update):
+    chat_id = update.message.chat_id
+    del keyboard_sent[chat_id]
+    hide_keyboard(bot, chat_id, "okay, okay...")
 
 
 def start(bot, update):
