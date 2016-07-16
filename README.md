@@ -29,6 +29,9 @@ This bot lets users select songs from Google Play Music to play on the bot host 
 * /ip - get the bot's local IP address
 * /reset - delete the BotPlaylist and BotStation on google play music, reset the admin setting and stop the bot
 * /stop - stop the bot
+* /togglepassword - toggles the session password
+* /setpassword [password] - sets the session password
+* /banuser - bans a user from the current session and resets the password
 
 ## Dependencies:
   - [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
