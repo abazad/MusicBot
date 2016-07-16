@@ -67,6 +67,7 @@ def start_bot():
     dispatcher.add_handler(CommandHandler('ip', send_ip))
     dispatcher.add_handler(CommandHandler('togglepassword', toggle_password))
     dispatcher.add_handler(CommandHandler('setpassword', set_password))
+    dispatcher.add_handler(CommandHandler('banuser', ban_user))
 
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
@@ -113,7 +114,7 @@ def cancel_keyboard(bot, update):
 
 
 def start(bot, update):
-    if session_password and update.message.from_user.id not in session_clients:
+    if not is_logged_in(update.message.from_user):
         bot.send_message(
             chat_id=update.message.chat_id, text="Please log in with /login [password]")
         return
@@ -123,12 +124,14 @@ def start(bot, update):
 
 def login(bot, update):
     chat_id = update.message.chat_id
-    user_id = update.message.from_user.id
+    user = update.message.from_user
     if not session_password:
         bot.send_message(chat_id=chat_id, text="There is no password")
         return
 
-    if user_id in session_clients:
+    user_map = user_tuple_from_user(user)
+
+    if user_map in session_clients:
         bot.send_message(chat_id=chat_id, text="You are already logged in")
         return
 
@@ -149,7 +152,7 @@ def login(bot, update):
         return
 
     if password == session_password:
-        session_clients.add(user_id)
+        session_clients.add(user_map)
         bot.send_message(chat_id=chat_id, text="Successfully logged in")
     else:
         bot.send_message(chat_id=chat_id, text="Wrong password")
@@ -165,23 +168,29 @@ def _admin(func):
     return _admin_func
 
 
+def user_tuple_from_user(user):
+    return (user.id,  user.first_name)
+
+
+def is_logged_in(user):
+    return not session_password or user_tuple_from_user(user) in session_clients
+
+
 def _password_protected(func):
     def _password_protected_func(bot, update):
         chat_id = update.message.chat_id
-        if session_password:
-            if session_password == " ":
-                bot.send_message(
-                    chat_id=chat_id, text="Admin hasn't decided which password to use yet")
-                return
+        if session_password == " ":
+            bot.send_message(
+                chat_id=chat_id, text="Admin hasn't decided which password to use yet")
+            return
 
-            user_id = update.message.from_user.id
-            if user_id in session_clients:
-                func(bot, update)
-            else:
-                bot.send_message(
-                    chat_id=chat_id, text="Please log in with /login [password]")
-        else:
+        user = update.message.from_user
+        if is_logged_in(user):
             func(bot, update)
+        else:
+            bot.send_message(
+                chat_id=chat_id, text="Please log in with /login [password]")
+
     return _password_protected_func
 
 
@@ -331,8 +340,9 @@ def get_inline_handler():
         return result
 
     def inline_handler(bot, update):
-        if session_password and update.inline_query.from_user.id not in session_clients:
+        if not is_logged_in(update.inline_query.from_user):
             return
+
         query = update.inline_query.query
         if not query:
             return
@@ -380,7 +390,7 @@ def get_youtube_inline_handler():
         return result
 
     def inline_handler(bot, update):
-        if session_password and update.inline_query.from_user.id not in session_clients:
+        if not is_logged_in(update.inline_query.from_user):
             return
 
         query = update.inline_query.query
@@ -506,7 +516,7 @@ def set_password(bot, update):
     chat_id = update.message.chat_id
     if not session_password:
         bot.send_message(
-            chat_id=chat_id, text="Please enable password protection with /enablepassword first")
+            chat_id=chat_id, text="Please enable password protection with /togglepassword first")
         return
 
     split = update.message.text.split(" ")
@@ -522,6 +532,47 @@ def set_password(bot, update):
 
     session_password = password
     bot.send_message(chat_id=chat_id, text="Successfully changed password")
+
+
+@_admin
+def ban_user(bot, update):
+    chat_id = update.message.chat_id
+    global session_clients
+    if chat_id in keyboard_sent:
+        bot.send_message(
+            chat_id=chat_id, text="Finish what you were doing first")
+        return
+
+    if not session_password:
+        bot.send_message(chat_id=chat_id, text="Password is disabled")
+        return
+
+    if not session_clients:
+        bot.send_message(chat_id=chat_id, text="No clients logged in")
+        return
+
+    keyboard = []
+
+    for client_id, first_name in session_clients:
+        keyboard.append(["{}) {}".format(client_id, first_name)])
+
+    markup = replykeyboardmarkup.ReplyKeyboardMarkup(
+        keyboard, one_time_keyboard=True, resize_keyboard=True)
+
+    def _ban_action(ban_id):
+        global session_clients
+        global session_password
+        ban_id = ban_id + 1
+        session_clients = set(
+            filter(lambda client: client[0] != ban_id, session_clients))
+        del keyboard_sent[chat_id]
+        session_password = " "
+        hide_keyboard(bot, chat_id, "Banned user. Please set a new password.")
+
+    keyboard_sent[chat_id] = _ban_action
+
+    bot.send_message(chat_id=chat_id, text="Who should be banned?",
+                     reply_markup=markup, reply_to_message_id=update.message.message_id)
 
 
 exiting = False
