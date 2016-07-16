@@ -55,13 +55,13 @@ def start_bot():
     dispatcher.add_handler(CommandHandler('showqueue', show_queue))
     dispatcher.add_handler(
         CommandHandler('currentsong', lambda b, u: show_current_song(b, u.message.chat_id)))
-    dispatcher.add_handler(
-        CommandHandler('clearqueue', lambda b, u: queued_player.clear_queue()))
+    dispatcher.add_handler(CommandHandler('clearqueue', clear_queue))
     dispatcher.add_handler(CommandHandler('movesong', move_song))
     dispatcher.add_handler(CommandHandler('admin', set_admin))
     dispatcher.add_handler(CommandHandler('reset', reset_bot))
     dispatcher.add_handler(CommandHandler('exit', lambda b, u: exit_bot()))
     dispatcher.add_handler(CommandHandler('ip', send_ip))
+    dispatcher.add_handler(CommandHandler('cancel', cancel_keyboard))
 
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
@@ -100,9 +100,22 @@ def hide_keyboard(bot, chat_id, message):
         chat_id=chat_id, text=message, reply_markup=markup, parse_mode="markdown")
 
 
+def cancel_keyboard(bot, update):
+    chat_id = update.message.chat_id
+    del keyboard_sent[chat_id]
+    hide_keyboard(bot, chat_id, "okay, okay...")
+
+
 def start(bot, update):
     bot.sendMessage(
         text="Type @gmusicqueuebot and search for a song", chat_id=update.message.chat_id)
+
+
+def _admin(func):
+    def _admin_func(bot, update):
+        if admin_chat_id == update.message.chat_id:
+            func(bot, update)
+    return _admin_func
 
 
 def get_queue_message():
@@ -323,6 +336,11 @@ def lookup_youtube_song_name(video_id):
         return title
 
 
+@_admin
+def clear_queue(bot, update):
+    queued_player.clear_queue()
+
+
 def queue(bot, update):
     storeId = update.chosen_inline_result["result_id"]
     user = update.chosen_inline_result["from_user"]
@@ -364,11 +382,11 @@ def set_admin(bot, update):
         bot.send_message(text="There can be only one!", chat_id=chat_id)
 
 
+@_admin
 def reset_bot(bot, update):
-    if update.message.chat_id == admin_chat_id:
-        save_config(('admin_chat_id', 0))
-        queued_player.reset()
-        exit_bot()
+    save_config(('admin_chat_id', 0))
+    queued_player.reset()
+    exit_bot()
 
 
 def get_ip_address():
@@ -377,10 +395,10 @@ def get_ip_address():
     return s.getsockname()[0]
 
 
+@_admin
 def send_ip(bot, update):
-    if update.message.chat_id == admin_chat_id:
-        text = "IP-Address: {}".format(get_ip_address())
-        bot.send_message(text=text, chat_id=admin_chat_id)
+    text = "IP-Address: {}".format(get_ip_address())
+    bot.send_message(text=text, chat_id=admin_chat_id)
 
 
 config_file = open("config.json", "r")
