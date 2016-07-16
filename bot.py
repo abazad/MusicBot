@@ -531,6 +531,7 @@ def set_password(bot, update):
         return
 
     session_password = password
+    session_clients.add(user_tuple_from_user(update.message.from_user))
     bot.send_message(chat_id=chat_id, text="Successfully changed password")
 
 
