@@ -45,23 +45,28 @@ def start_bot():
 
     dispatcher.add_handler(MessageHandler([Filters.text], handle_message))
 
+    # public commands
     dispatcher.add_handler(CommandHandler('start', start))
-    dispatcher.add_handler(CommandHandler('next', next_song))
-    dispatcher.add_handler(
-        CommandHandler('play', lambda b, u: queued_player.resume()))
-    dispatcher.add_handler(
-        CommandHandler('pause', lambda b, u: queued_player.pause()))
-    dispatcher.add_handler(CommandHandler('skip', skip))
     dispatcher.add_handler(CommandHandler('showqueue', show_queue))
-    dispatcher.add_handler(
-        CommandHandler('currentsong', lambda b, u: show_current_song(b, u.message.chat_id)))
-    dispatcher.add_handler(CommandHandler('clearqueue', clear_queue))
-    dispatcher.add_handler(CommandHandler('movesong', move_song))
-    dispatcher.add_handler(CommandHandler('admin', set_admin))
-    dispatcher.add_handler(CommandHandler('reset', reset_bot))
-    dispatcher.add_handler(CommandHandler('exit', lambda b, u: exit_bot()))
-    dispatcher.add_handler(CommandHandler('ip', send_ip))
+    dispatcher.add_handler(CommandHandler('currentsong', show_current_song))
     dispatcher.add_handler(CommandHandler('cancel', cancel_keyboard))
+    dispatcher.add_handler(CommandHandler('login', login))
+
+    # password protected commands
+    dispatcher.add_handler(CommandHandler('next', next_song))
+    dispatcher.add_handler(CommandHandler('play', play))
+    dispatcher.add_handler(CommandHandler('pause', pause))
+    dispatcher.add_handler(CommandHandler('skip', skip))
+    dispatcher.add_handler(CommandHandler('movesong', move_song))
+
+    # admin commands
+    dispatcher.add_handler(CommandHandler('admin', set_admin))
+    dispatcher.add_handler(CommandHandler('clearqueue', clear_queue))
+    dispatcher.add_handler(CommandHandler('reset', reset_bot))
+    dispatcher.add_handler(CommandHandler('exit', exit_bot_command))
+    dispatcher.add_handler(CommandHandler('ip', send_ip))
+    dispatcher.add_handler(CommandHandler('togglepassword', toggle_password))
+    dispatcher.add_handler(CommandHandler('setpassword', set_password))
 
     dispatcher.add_handler(InlineQueryHandler(get_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(queue))
@@ -102,20 +107,82 @@ def hide_keyboard(bot, chat_id, message):
 
 def cancel_keyboard(bot, update):
     chat_id = update.message.chat_id
-    del keyboard_sent[chat_id]
-    hide_keyboard(bot, chat_id, "okay, okay...")
+    if chat_id in keyboard_sent:
+        del keyboard_sent[chat_id]
+    hide_keyboard(bot, chat_id, "kk...")
 
 
 def start(bot, update):
-    bot.sendMessage(
+    if session_password and update.message.from_user.id not in session_clients:
+        bot.send_message(
+            chat_id=update.message.chat_id, text="Please log in with /login [password]")
+        return
+    bot.send_message(
         text="Type @gmusicqueuebot and search for a song", chat_id=update.message.chat_id)
+
+
+def login(bot, update):
+    chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
+    if not session_password:
+        bot.send_message(chat_id=chat_id, text="There is no password")
+        return
+
+    if user_id in session_clients:
+        bot.send_message(chat_id=chat_id, text="You are already logged in")
+        return
+
+    if session_password == " ":
+        bot.send_message(
+            chat_id=chat_id, text="Admin hasn't decided which password to use yet")
+        return
+
+    split = update.message.text.split(" ")
+    if len(split) < 2:
+        bot.send_message(
+            chat_id=chat_id, text="Usage: /login [password]")
+        return
+
+    password = split[1].strip()
+    if not password:
+        bot.send_message(chat_id=chat_id, text="Password can't be empty")
+        return
+
+    if password == session_password:
+        session_clients.add(user_id)
+        bot.send_message(chat_id=chat_id, text="Successfully logged in")
+    else:
+        bot.send_message(chat_id=chat_id, text="Wrong password")
 
 
 def _admin(func):
     def _admin_func(bot, update):
         if admin_chat_id == update.message.chat_id:
             func(bot, update)
+        else:
+            bot.send_message(
+                chat_id=update.message.chat_id, text="This command is for admins only")
     return _admin_func
+
+
+def _password_protected(func):
+    def _password_protected_func(bot, update):
+        chat_id = update.message.chat_id
+        if session_password:
+            if session_password == " ":
+                bot.send_message(
+                    chat_id=chat_id, text="Admin hasn't decided which password to use yet")
+                return
+
+            user_id = update.message.from_user.id
+            if user_id in session_clients:
+                func(bot, update)
+            else:
+                bot.send_message(
+                    chat_id=chat_id, text="Please log in with /login [password]")
+        else:
+            func(bot, update)
+    return _password_protected_func
 
 
 def get_queue_message():
@@ -152,6 +219,7 @@ def send_queue_keyboard(bot, chat_id, message_id, text):
                      reply_markup=markup, reply_to_message_id=message_id)
 
 
+@_password_protected
 def skip(bot, update):
     queue = queued_player.get_queue()
     if len(queue) == 0:
@@ -173,6 +241,7 @@ def skip(bot, update):
     keyboard_sent[chat_id] = skip_action
 
 
+@_password_protected
 def move_song(bot, update):
     message = update.message
     chat_id = message.chat_id
@@ -205,16 +274,26 @@ def move_song(bot, update):
     keyboard_sent[chat_id] = move_song_first_action
 
 
+@_password_protected
+def play(bot, update):
+    queued_player.resume()
+
+
+@_password_protected
+def pause(bot, update):
+    queued_player.pause()
+
+
+@_password_protected
 def next_song(bot, update):
     def _next_job():
         queued_player.next()
-        message = update.message
-        show_current_song(bot, message.chat_id)
+        show_current_song(bot, update)
     threading.Thread(target=_next_job, name="next_thread").start()
 
 
-def show_current_song(bot, chat_id):
-    bot.send_message(chat_id=chat_id, text="Now playing: {}".format(
+def show_current_song(bot, update):
+    bot.send_message(chat_id=update.message.chat_id, text="Now playing: {}".format(
         queued_player.get_current_song()['name']))
 
 
@@ -252,6 +331,8 @@ def get_inline_handler():
         return result
 
     def inline_handler(bot, update):
+        if session_password and update.inline_query.from_user.id not in session_clients:
+            return
         query = update.inline_query.query
         if not query:
             return
@@ -299,6 +380,9 @@ def get_youtube_inline_handler():
         return result
 
     def inline_handler(bot, update):
+        if session_password and update.inline_query.from_user.id not in session_clients:
+            return
+
         query = update.inline_query.query
         if not query:
             return
@@ -401,39 +485,52 @@ def send_ip(bot, update):
     bot.send_message(text=text, chat_id=admin_chat_id)
 
 
-config_file = open("config.json", "r")
-config = json.loads(config_file.read())
-admin_chat_id = config.get('admin_chat_id', 0)
-secrets_location = config.get('secrets_location', "")
-config_file.close()
+@_admin
+def toggle_password(bot, update):
+    global session_password
+    chat_id = update.message.chat_id
+    if session_password:
+        session_password = None
+        session_clients.clear()
+        bot.send_message(chat_id=chat_id, text="Password deactivated")
+        return
 
-user, password, device_id, token, youtube_token, youtube_api_key = read_secrets()
-
-
-api = Mobileclient(debug_logging=False)
-if not api.login(user, password, device_id, "de_DE"):
-    print("Failed to log in to gmusic")
-    sys.exit(1)
-
-queued_player = None
-updater = None
-youtube_updater = None
+    session_password = " "
+    bot.send_message(
+        chat_id=chat_id, text="Password is now enabled. Set a password with /setpassword [password]")
 
 
-def run_player():
-    global queued_player
-    queued_player = player.Player(api)
-    queued_player.run()
+@_admin
+def set_password(bot, update):
+    global session_password
+    chat_id = update.message.chat_id
+    if not session_password:
+        bot.send_message(
+            chat_id=chat_id, text="Please enable password protection with /enablepassword first")
+        return
 
-player_thread = threading.Thread(target=run_player, name="player_thread")
-start_bot()
-start_youtube_bot()
-player_thread.start()
+    split = update.message.text.split(" ")
+    if len(split) < 2:
+        bot.send_message(
+            chat_id=chat_id, text="Usage: /setpassword [password]")
+        return
+
+    password = split[1].strip()
+    if not password:
+        bot.send_message(chat_id=chat_id, text="Password can't be empty")
+        return
+
+    session_password = password
+    bot.send_message(chat_id=chat_id, text="Successfully changed password")
+
 
 exiting = False
-
-
 exit_lock = threading.Lock()
+
+
+@_admin
+def exit_bot_command(bot, update):
+    exit_bot()
 
 
 def exit_bot(updater_stopped=False):
@@ -459,6 +556,42 @@ def exit_bot(updater_stopped=False):
     # There is a bug in python-telegram-bot that causes a deadlock if
     # updater.stop() is called from a handler...
     threading.Thread(target=exit_job, name="EXIT_THREAD").start()
+
+
+config_file = open("config.json", "r")
+config = json.loads(config_file.read())
+admin_chat_id = config.get('admin_chat_id', 0)
+secrets_location = config.get('secrets_location', "")
+config_file.close()
+
+user, password, device_id, token, youtube_token, youtube_api_key = read_secrets()
+
+session_clients = set()
+session_password = None
+if admin_chat_id:
+    session_password = " "
+
+
+api = Mobileclient(debug_logging=False)
+if not api.login(user, password, device_id, "de_DE"):
+    print("Failed to log in to gmusic")
+    sys.exit(1)
+
+queued_player = None
+updater = None
+youtube_updater = None
+
+
+def run_player():
+    global queued_player
+    queued_player = player.Player(api)
+    queued_player.run()
+
+player_thread = threading.Thread(target=run_player, name="player_thread")
+start_bot()
+start_youtube_bot()
+player_thread.start()
+
 
 while(updater is None or youtube_updater is None):
     sleep(1)
