@@ -5,8 +5,10 @@ import threading
 import time
 import urllib
 
+from gmusicapi.exceptions import CallFailure
 import pafy
 from pydub import AudioSegment
+
 
 config_file = open("config.json", "r")
 config = json.loads(config_file.read())
@@ -66,7 +68,17 @@ def get_gmusic_loader(api, store_id):
         if not os.path.isfile(fname):
             if not os.path.isfile(mp3_fname):
                 download_semaphore.acquire()
-                url = api.get_stream_url(store_id, quality=quality)
+                attempts = 3
+                while attempts:
+                    try:
+                        url = api.get_stream_url(store_id, quality=quality)
+                        attempts = 0
+                    except CallFailure:
+                        # Sometimes, the call returns a 403
+                        attempts -= 1
+                        print(
+                            "403, retrying... ({} attempts left)".format(attempts))
+
                 request = urllib.request.Request(url)
                 page = urllib.request.urlopen(request)
 
