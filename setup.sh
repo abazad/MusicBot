@@ -5,4 +5,4 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 apt-get install libav-tools libavcodec-extra-56 libssl-dev libffi-dev libasound2-dev -y
-pip install python-telegram-bot gmusicapi youtube-dl pafy pydub simpleaudio --upgrade
+pip install python-telegram-bot gmusicapi youtube-dl pafy pydub simpleaudio soundcloud --upgrade
