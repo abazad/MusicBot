@@ -635,10 +635,13 @@ with open("config.json", "r") as config_file:
     secrets_location = config.get('secrets_location', "")
     del config
 
-with open("ids.json", "r") as ids_file:
-    ids = json.loads(ids_file.read())
-    admin_chat_id = ids.get('admin_chat_id', 0)
-    del ids
+if path.isfile("ids.json"):
+    with open("ids.json", "r") as ids_file:
+        ids = json.loads(ids_file.read())
+        admin_chat_id = ids.get('admin_chat_id', 0)
+        del ids
+else:
+    admin_chat_id = 0
 
 user, password, device_id, token, youtube_token, youtube_api_key = read_secrets()
 
