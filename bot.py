@@ -454,13 +454,13 @@ def youtube_queue(bot, update):
     print("YT_QUEUED by", user["first_name"], ":", song_name)
 
 
-def save_config(*args):
-    config_file = open('config.json', 'r')
+def save_config(file="config.json", *args):
+    config_file = open(file, 'r')
     config = json.loads(config_file.read())
     config_file.close()
     for key, value in args:
         config[key] = value
-    config_file = open('config.json', 'w')
+    config_file = open(file, 'w')
     config_file.write(json.dumps(config, indent=4, sort_keys=True))
 
 
@@ -469,7 +469,7 @@ def set_admin(bot, update):
     chat_id = update.message.chat_id
     if not admin_chat_id:
         admin_chat_id = chat_id
-        save_config(('admin_chat_id', admin_chat_id))
+        save_config("ids.json", ('admin_chat_id', admin_chat_id))
         bot.send_message(text="You're admin now!", chat_id=chat_id)
     elif chat_id == admin_chat_id:
         bot.send_message(text="You already are admin!", chat_id=chat_id)
@@ -479,7 +479,7 @@ def set_admin(bot, update):
 
 @_admin
 def reset_bot(bot, update):
-    save_config(('admin_chat_id', 0))
+    save_config("ids.json", ('admin_chat_id', 0))
     queued_player.reset()
     exit_bot()
 
@@ -630,11 +630,15 @@ def exit_bot(updater_stopped=False):
     threading.Thread(target=exit_job, name="EXIT_THREAD").start()
 
 
-config_file = open("config.json", "r")
-config = json.loads(config_file.read())
-admin_chat_id = config.get('admin_chat_id', 0)
-secrets_location = config.get('secrets_location', "")
-config_file.close()
+with open("config.json", "r") as config_file:
+    config = json.loads(config_file.read())
+    secrets_location = config.get('secrets_location', "")
+    del config
+
+with open("ids.json", "r") as ids_file:
+    ids = json.loads(ids_file.read())
+    admin_chat_id = ids.get('admin_chat_id', 0)
+    del ids
 
 user, password, device_id, token, youtube_token, youtube_api_key = read_secrets()
 
