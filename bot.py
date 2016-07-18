@@ -9,6 +9,7 @@ from time import sleep
 from gmusicapi.clients.mobileclient import Mobileclient
 import pafy
 import pylru
+import soundcloud
 from telegram import InlineQueryResultArticle, InputTextMessageContent
 from telegram import replykeyboardhide
 from telegram import replykeyboardmarkup
@@ -36,7 +37,9 @@ def read_secrets():
     token = content["token"].strip()
     youtube_token = content["youtube_bot_token"]
     api_key = content["youtube_api_key"]
-    return user, password, device_id, token, youtube_token, api_key
+    soundcloud_token = content["soundcloud_bot_token"]
+    soundcloud_id = content["soundcloud_id"]
+    return user, password, device_id, token, youtube_token, api_key, soundcloud_token, soundcloud_id
 
 
 def start_bot():
@@ -85,6 +88,16 @@ def start_youtube_bot():
     dispatcher.add_handler(InlineQueryHandler(get_youtube_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(youtube_queue))
     youtube_updater.start_polling()
+
+
+def start_soundcloud_bot():
+    global soundcloud_updater
+    soundcloud_updater = Updater(token=soundcloud_token)
+    dispatcher = soundcloud_updater.dispatcher
+
+    dispatcher.add_handler(InlineQueryHandler(get_soundcloud_inline_handler()))
+    dispatcher.add_handler(ChosenInlineResultHandler(soundcloud_queue))
+    soundcloud_updater.start_polling()
 
 
 def handle_message(bot, update):
@@ -404,6 +417,39 @@ def get_youtube_inline_handler():
         bot.answerInlineQuery(update.inline_query.id, results)
     return inline_handler
 
+
+def search_soundcloud_song(query):
+    return soundcloud_client.get("tracks/", q=query)
+
+
+def get_soundcloud_inline_handler():
+    def get_inline_result(track):
+        song_id = track.id
+        title = track.title
+        song_names[song_id] = track
+        description = track.user['username']
+        result = InlineQueryResultArticle(
+            id=song_id,
+            title=title,
+            description=description,
+            input_message_content=InputTextMessageContent(title),
+            thumb_url=track.artwork_url
+        )
+        return result
+
+    def inline_handler(bot, update):
+        if not is_logged_in(update.inline_query.from_user):
+            return
+
+        query = update.inline_query.query
+        if not query:
+            return
+
+        search_results = search_soundcloud_song(query)
+        results = list(map(get_inline_result, search_results))
+        bot.answerInlineQuery(update.inline_query.id, results)
+    return inline_handler
+
 song_names = pylru.lrucache(512)
 
 
@@ -432,6 +478,16 @@ def lookup_youtube_song_name(video_id):
         return title
 
 
+def lookup_soundcloud_track(song_id):
+    if not song_id:
+        return "Nothing"
+    elif song_id in song_names:
+        return song_names[song_id]
+    else:
+        track = soundcloud_client.get("/tracks/{}".format(song_id))
+        return track
+
+
 @_admin
 def clear_queue(bot, update):
     queued_player.clear_queue()
@@ -453,6 +509,17 @@ def youtube_queue(bot, update):
     queued_player.queue({'store_id': video_id, 'load_song': player.get_youtube_loader(
         video_id), 'name': song_name})
     print("YT_QUEUED by", user["first_name"], ":", song_name)
+
+
+def soundcloud_queue(bot, update):
+    song_id = update.chosen_inline_result["result_id"]
+    user = update.chosen_inline_result["from_user"]
+
+    track = lookup_soundcloud_track(song_id)
+
+    queued_player.queue({'store_id': song_id, 'load_song': player.get_soundcloud_loader(
+        soundcloud_client, track), 'name': track.title})
+    print("SC_QUEUED by", user["first_name"], ":", track.title)
 
 
 def save_config(file="config.json", *args):
@@ -621,6 +688,8 @@ def exit_bot(updater_stopped=False):
         print("Updater stopped")
         youtube_updater.stop()
         print("Youtube updater stopped")
+        soundcloud_updater.stop()
+        print("Soundcloud updater stopped")
         queued_player.close()
         print("Player closed")
         api.logout()
@@ -644,7 +713,7 @@ if path.isfile("ids.json"):
 else:
     admin_chat_id = 0
 
-user, password, device_id, token, youtube_token, youtube_api_key = read_secrets()
+user, password, device_id, token, youtube_token, youtube_api_key, soundcloud_token,  soundcloud_id = read_secrets()
 
 session_clients = set()
 session_password = None
@@ -657,9 +726,12 @@ if not api.login(user, password, device_id, "de_DE"):
     print("Failed to log in to gmusic")
     sys.exit(1)
 
+soundcloud_client = soundcloud.Client(client_id=soundcloud_id)
+
 queued_player = None
 updater = None
 youtube_updater = None
+soundcloud_updater = None
 
 
 def run_player():
@@ -670,10 +742,11 @@ def run_player():
 player_thread = threading.Thread(target=run_player, name="player_thread")
 start_bot()
 start_youtube_bot()
+start_soundcloud_bot()
 player_thread.start()
 
 
-while(updater is None or youtube_updater is None):
+while(not (updater and youtube_updater and soundcloud_updater)):
     sleep(1)
 try:
     updater.idle()

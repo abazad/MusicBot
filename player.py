@@ -116,6 +116,48 @@ def get_gmusic_loader(api, store_id):
     return _gmusic_loader
 
 
+def get_soundcloud_loader(client, track):
+    def _soundcloud_loader():
+        url = client.get(track.stream_url, allow_redirects=False).location
+        track_id = str(track.id)
+        mp3_fname = "songs/" + track_id + ".mp3"
+        fname = "songs/" + track_id + ".wav"
+        if not os.path.isdir("songs"):
+            os.mkdir("songs")
+
+        if not os.path.isfile(fname):
+            if not os.path.isfile(mp3_fname):
+                download_semaphore.acquire()
+                mp3_fname_tmp = mp3_fname + ".tmp"
+                if os.path.isfile(mp3_fname_tmp):
+                    os.remove(mp3_fname_tmp)
+
+                request = urllib.request.Request(url)
+                page = urllib.request.urlopen(request)
+
+                file = open(mp3_fname_tmp, "wb")
+                file.write(page.read())
+                file.close()
+                page.close()
+
+                os.rename(mp3_fname_tmp, mp3_fname)
+                download_semaphore.release()
+
+            convert_semaphore.acquire()
+            song = AudioSegment.from_mp3(mp3_fname)
+            song = song.normalize()
+            fname_tmp = fname + ".tmp"
+            if os.path.isfile(fname_tmp):
+                os.remove(fname_tmp)
+            song.export(fname_tmp, "wav")
+            os.remove(mp3_fname)
+            os.rename(fname_tmp, fname)
+            convert_semaphore.release()
+
+        return fname
+    return _soundcloud_loader
+
+
 class SongProvider(object):
 
     def __init__(self, api):

@@ -43,6 +43,7 @@ This bot lets users select songs from Google Play Music to play on the bot host 
   - [pydub](https://github.com/jiaaro/pydub) (needs libav or ffmpeg "apt-get install libav-tools libavcodec-extra-5x")
   - [simpleaudio](https://github.com/hamiltron/py-simple-audio) (needs alsa, "apt-get install libasound2-dev")
   - [pylru](https://github.com/jlhutch/pylru)
+  - [soundcloud](https://github.com/soundcloud/soundcloud-python)
   
 ## Contributions:
 All contributions are welcome, please make pull requests against the dev branch
