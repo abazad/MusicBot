@@ -70,14 +70,16 @@ def get_gmusic_loader(api, store_id):
                 download_semaphore.acquire()
                 attempts = 3
                 url = None
-                while attempts or not url:
+                while attempts and not url:
                     try:
                         url = api.get_stream_url(store_id, quality=quality)
-                    except CallFailure:
+                    except CallFailure as e:
                         # Sometimes, the call returns a 403
                         attempts -= 1
                         print(
                             "403, retrying... ({} attempts left)".format(attempts))
+                        if not attempts:
+                            print(e)
 
                 if not attempts:
                     return None  # TODO do something else here
