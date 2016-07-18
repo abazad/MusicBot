@@ -362,10 +362,13 @@ def get_inline_handler():
         if not query:
             return
 
-        search_results = search_song(query)
+        def _search_and_result():
+            search_results = search_song(query)
+            results = list(map(get_inline_result, search_results))
+            bot.answerInlineQuery(update.inline_query.id, results)
 
-        results = list(map(get_inline_result, search_results))
-        bot.answerInlineQuery(update.inline_query.id, results)
+        threading.Thread(
+            name="GM_search_thread", target=_search_and_result).start()
     return inline_handler
 
 
@@ -412,9 +415,13 @@ def get_youtube_inline_handler():
         if not query:
             return
 
-        search_results = search_youtube_song(query)
-        results = list(map(get_inline_result, search_results))
-        bot.answerInlineQuery(update.inline_query.id, results)
+        def _search_and_result():
+            search_results = search_youtube_song(query)
+            results = list(map(get_inline_result, search_results))
+            bot.answerInlineQuery(update.inline_query.id, results)
+
+        threading.Thread(
+            name="YT_search_thread", target=_search_and_result).start()
     return inline_handler
 
 
@@ -445,9 +452,13 @@ def get_soundcloud_inline_handler():
         if not query:
             return
 
-        search_results = search_soundcloud_song(query)
-        results = list(map(get_inline_result, search_results))
-        bot.answerInlineQuery(update.inline_query.id, results)
+        def _search_and_result():
+            search_results = search_soundcloud_song(query)
+            results = list(map(get_inline_result, search_results))
+            bot.answerInlineQuery(update.inline_query.id, results)
+
+        threading.Thread(
+            name="SC_search_thread", target=_search_and_result).start()
     return inline_handler
 
 song_names = pylru.lrucache(512)
