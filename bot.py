@@ -8,6 +8,7 @@ from time import sleep
 
 from gmusicapi.clients.mobileclient import Mobileclient
 import pafy
+import pylru
 from telegram import InlineQueryResultArticle, InputTextMessageContent
 from telegram import replykeyboardhide
 from telegram import replykeyboardmarkup
@@ -403,7 +404,7 @@ def get_youtube_inline_handler():
         bot.answerInlineQuery(update.inline_query.id, results)
     return inline_handler
 
-song_names = {}
+song_names = pylru.lrucache(512)
 
 
 def lookup_song_name(store_id):
