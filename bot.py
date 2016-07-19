@@ -9,9 +9,7 @@ import threading
 from time import sleep
 
 from gmusicapi.clients.mobileclient import Mobileclient
-import pafy
 import pylru
-import soundcloud
 from telegram import InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import InlineQueryHandler, ChosenInlineResultHandler
 from telegram.ext.commandhandler import CommandHandler
@@ -754,14 +752,20 @@ with open("config.json", "r") as config_file:
 with open(secrets_path, "r") as secrets_file:
     content = secrets_file.read()
     content = json.loads(content)
-    gmusic_user = content["gmusic_username"].strip()
-    gmusic_password = content["gmusic_password"].strip()
-    gmusic_device_id = content["gmusic_device_id"].strip()
-    gmusic_token = content["gmusic_bot_token"].strip()
-    youtube_token = content["youtube_bot_token"].strip()
-    youtube_api_key = content["youtube_api_key"].strip()
-    soundcloud_token = content["soundcloud_bot_token"].strip()
-    soundcloud_id = content["soundcloud_id"].strip()
+    content = {k: str.strip(v) for k, v in content.items()}
+    try:
+        gmusic_user = content["gmusic_username"]
+        gmusic_password = content["gmusic_password"]
+        gmusic_device_id = content["gmusic_device_id"]
+        gmusic_token = content["gmusic_bot_token"]
+    except KeyError:
+        print("Missing GMusic secrets")
+        exit(2)
+
+    youtube_token = content.get("youtube_bot_token", None)
+    youtube_api_key = content.get("youtube_api_key", None)
+    soundcloud_token = content.get("soundcloud_bot_token", None)
+    soundcloud_id = content.get("soundcloud_id", None)
     del content
 
 
@@ -784,7 +788,9 @@ if not api.login(gmusic_user, gmusic_password, gmusic_device_id, "de_DE"):
     print("Failed to log in to gmusic")
     sys.exit(1)
 
-soundcloud_client = soundcloud.Client(client_id=soundcloud_id)
+if soundcloud_id and soundcloud_token:
+    import soundcloud
+    soundcloud_client = soundcloud.Client(client_id=soundcloud_id)
 
 queued_player = None
 gmusic_updater = None
@@ -792,10 +798,21 @@ youtube_updater = None
 soundcloud_updater = None
 
 
-player_thread = threading.Thread(target=run_player, name="player_thread")
 start_gmusic_bot()
-start_youtube_bot()
-start_soundcloud_bot()
+
+if youtube_token and youtube_api_key:
+    import pafy
+    start_youtube_bot()
+else:
+    youtube_updater = True
+
+if soundcloud_token and soundcloud_id:
+    start_soundcloud_bot()
+else:
+    soundcloud_updater = True
+
+
+player_thread = threading.Thread(target=run_player, name="player_thread")
 player_thread.start()
 
 
