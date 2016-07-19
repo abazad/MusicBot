@@ -187,7 +187,7 @@ def keyboard_answer_handler(func):
     return _handler
 
 
-thread_pool = ThreadPoolExecutor(multiprocessing.cpu_count())
+thread_pool = ThreadPoolExecutor(max(4, multiprocessing.cpu_count() * 2))
 
 
 def multithreaded_command(func):
