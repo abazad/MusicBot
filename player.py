@@ -4,6 +4,7 @@ from random import choice
 import threading
 import time
 import urllib
+import re
 
 from gmusicapi.exceptions import CallFailure
 import pafy
@@ -16,6 +17,17 @@ config = json.loads(config_file.read())
 max_downloads = config['max_downloads']
 max_conversions = config['max_conversions']
 quality = config['quality']
+song_path = config['song_path']
+
+if not re.compile(r'[ \S]+(\\|\/)$').match(song_path):
+    song_path+="/"
+
+if not os.path.isdir(song_path):
+    try:
+        os.makedirs(song_path)
+    except OSError:
+        print("'%s' is not a valid directory path. Exiting." % song_path)
+        exit()
 
 download_semaphore = threading.Semaphore(max_downloads)
 convert_semaphore = threading.Semaphore(max_conversions)
@@ -30,10 +42,8 @@ def get_youtube_loader(video_id):
         video = pafy.new(url)
         audio = video.getbestaudio()
 
-        video_fname = "songs/" + video.videoid + "." + audio.extension
-        fname = "songs/" + video.videoid + ".wav"
-        if not os.path.isdir("songs"):
-            os.mkdir("songs")
+        video_fname = song_path + video.videoid + "." + audio.extension
+        fname = song_path + video.videoid + ".wav"
 
         if not os.path.isfile(fname):
             if not os.path.isfile(video_fname):
@@ -62,8 +72,8 @@ def get_youtube_loader(video_id):
 
 def get_gmusic_loader(api, store_id):
     def _gmusic_loader():
-        mp3_fname = "songs/" + store_id + '.mp3'
-        fname = "songs/" + store_id + ".wav"
+        mp3_fname = song_path + store_id + '.mp3'
+        fname = song_path + store_id + ".wav"
 
         if not os.path.isfile(fname):
             if not os.path.isfile(mp3_fname):
@@ -87,8 +97,6 @@ def get_gmusic_loader(api, store_id):
                 request = urllib.request.Request(url)
                 page = urllib.request.urlopen(request)
 
-                if not os.path.isdir("songs"):
-                    os.mkdir("songs")
 
                 mp3_fname_tmp = mp3_fname + ".tmp"
                 if os.path.isfile(mp3_fname_tmp):
@@ -120,10 +128,8 @@ def get_soundcloud_loader(client, track):
     def _soundcloud_loader():
         url = client.get(track.stream_url, allow_redirects=False).location
         track_id = str(track.id)
-        mp3_fname = "songs/" + track_id + ".mp3"
-        fname = "songs/" + track_id + ".wav"
-        if not os.path.isdir("songs"):
-            os.mkdir("songs")
+        mp3_fname = song_path + track_id + ".mp3"
+        fname = song_path + track_id + ".wav"
 
         if not os.path.isfile(fname):
             if not os.path.isfile(mp3_fname):
