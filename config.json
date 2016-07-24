@@ -2,6 +2,6 @@
     "max_downloads" : 1,
     "max_conversions": 1,
     "quality": "med",
-    "secrets_location": ""
+    "secrets_location": "",
+    "song_path": "songs"
 }
-
