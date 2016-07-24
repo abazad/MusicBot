@@ -1,22 +1,22 @@
 from concurrent.futures.thread import ThreadPoolExecutor
+from gmusicapi.clients.mobileclient import Mobileclient
 import json
 import multiprocessing
 from os import path
+import pylru
 from signal import SIGTERM
 import socket
 import sys
+from telegram import InlineQueryResultArticle, InputTextMessageContent
+from telegram.ext.commandhandler import CommandHandler
+from telegram.ext.messagehandler import MessageHandler, Filters
+from telegram.replykeyboardmarkup import ReplyKeyboardMarkup
 import threading
 from time import sleep
 
-from gmusicapi.clients.mobileclient import Mobileclient
-import pylru
-from telegram import InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import InlineQueryHandler, ChosenInlineResultHandler
-from telegram.ext.commandhandler import CommandHandler
-from telegram.ext.messagehandler import MessageHandler, Filters
 from telegram.ext.updater import Updater
 from telegram.replykeyboardhide import ReplyKeyboardHide
-from telegram.replykeyboardmarkup import ReplyKeyboardMarkup
 
 import player
 
@@ -490,38 +490,45 @@ def get_soundcloud_inline_handler():
 # check for client authentication too
 
 @multithreaded_command
-@password_protected_command
 def gmusic_queue(bot, update):
     storeId = update.chosen_inline_result["result_id"]
-    gmusic_user = update.chosen_inline_result["from_user"]
+    user = update.chosen_inline_result["from_user"]
+
+    if not is_logged_in(user):
+        return
+
     song_name = lookup_gmusic_song_name(storeId)
     queued_player.queue(
         {'store_id': storeId, 'load_song': player.get_gmusic_loader(api, storeId), 'name': song_name})
-    print("GM_QUEUED by", gmusic_user["first_name"], ":", song_name)
+    print("GM_QUEUED by", user["first_name"], ":", song_name)
 
 
 @multithreaded_command
-@password_protected_command
 def youtube_queue(bot, update):
     video_id = update.chosen_inline_result["result_id"]
-    gmusic_user = update.chosen_inline_result["from_user"]
+    user = update.chosen_inline_result["from_user"]
+
+    if not is_logged_in(user):
+        return
+
     song_name = lookup_youtube_song_name(video_id)
     queued_player.queue({'store_id': video_id, 'load_song': player.get_youtube_loader(
         video_id), 'name': song_name})
-    print("YT_QUEUED by", gmusic_user["first_name"], ":", song_name)
+    print("YT_QUEUED by", user["first_name"], ":", song_name)
 
 
 @multithreaded_command
-@password_protected_command
 def soundcloud_queue(bot, update):
     song_id = update.chosen_inline_result["result_id"]
-    gmusic_user = update.chosen_inline_result["from_user"]
+    user = update.chosen_inline_result["from_user"]
+
+    if not is_logged_in(user):
+        return
 
     track = lookup_soundcloud_track(song_id)
-
     queued_player.queue({'store_id': song_id, 'load_song': player.get_soundcloud_loader(
         soundcloud_client, track), 'name': track.title})
-    print("SC_QUEUED by", gmusic_user["first_name"], ":", track.title)
+    print("SC_QUEUED by", user["first_name"], ":", track.title)
 
 
 # Admin commands
