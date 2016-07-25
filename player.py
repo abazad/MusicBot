@@ -289,10 +289,11 @@ class SongProvider(object):
 
 class SongQueue(list):
 
-    def __init__(self, song_provider):
+    def __init__(self, song_provider, notificator):
         self._song_provider = song_provider
         self._prepare_next()
         self._lock = threading.Lock()
+        self._notificator = notificator
 
     def _prepare_next(self):
         print("PREPARING")
@@ -332,6 +333,8 @@ class SongQueue(list):
             song['load_song'] = lambda: fname
             list.append(self, *args, **kwargs)
             print("FINISHED LOADING APPENDED SONG")
+            NotificationCause = self._notificator.NotificationCause
+            self._notificator.notify(NotificationCause.queue_add(song['name']))
 
         threading.Thread(target=_append, name="append_thread").start()
 
@@ -341,17 +344,18 @@ class SongQueue(list):
 
 class Player(object):
 
-    def __init__(self, api):
+    def __init__(self, api, notificator):
         import simpleaudio
         self._sa = simpleaudio
         self._player = None
         self._stop = False
         self._pause = False
         self._api = api
-        self._queue = SongQueue(SongProvider(api))
+        self._queue = SongQueue(SongProvider(api), notificator)
         self._current_song = None
         self._lock = threading.Lock()
         self._barrier = threading.Barrier(2)
+        self._notificator = notificator
 
     def queue(self, song):
         self._queue.append(song)
@@ -359,17 +363,10 @@ class Player(object):
     def get_queue(self):
         return self._queue
 
-    def skip_song(self, **kwargs):
-        '''
-        Needs argument store_id or queue_position
-        '''
-        if "store_id" in kwargs:
-            store_id = kwargs["store_id"]
-            self._queue = list(
-                filter(lambda song: song['store_id'] != store_id))
-        elif "queue_position" in kwargs:
-            pos = kwargs["queue_position"]
-            self._queue.pop(pos)
+    def skip_song(self, queue_position):
+        song = self._queue.pop(queue_position)
+        NotificationCause = self._notificator.NotificationCause
+        self._notificator.notify(NotificationCause.queue_remove(song['name']))
 
     def pause(self):
         self._pause = True
@@ -413,6 +410,10 @@ class Player(object):
             self._player.stop()
         self._player = wave_obj.play()
         self._current_song = song
+
+        NotificationCause = self._notificator.NotificationCause
+        self._notificator.notify(NotificationCause.next_song())
+
         if threading.current_thread().name == "next_thread":
             self._barrier.wait()
         self._lock.release()

@@ -1,4 +1,5 @@
 from concurrent.futures.thread import ThreadPoolExecutor
+from enum import Enum
 from gmusicapi.clients.mobileclient import Mobileclient
 import json
 import multiprocessing
@@ -84,6 +85,10 @@ def is_logged_in(user):
     return not session_password or user_tuple_from_user(user) in session_clients
 
 
+def get_current_song_message():
+    return "Now playing: {}".format(queued_player.get_current_song()['name'])
+
+
 def get_queue_message():
     queue = queued_player.get_queue()
     message = "\n"
@@ -102,6 +107,37 @@ def get_queue_keyboard_items():
     for i in range(0, len(queue)):
         keyboard_items.append("{}) {}".format(i + 1, queue[i]['name']))
     return keyboard_items
+
+
+class Notificator(object):
+
+    class NotificationCause(Enum):
+        next_song = get_current_song_message
+        queue_add = lambda name: "Added to queue: " + name
+        queue_remove = lambda name: "Removed from queue: " + name
+
+    _subscribers = set()
+    _bot = None
+
+    def __init__(self):
+        pass
+
+    def subscribe(self, bot, update):
+        if not Notificator._bot:
+            Notificator._bot = bot
+        chat_id = update.message.chat_id
+        Notificator._subscribers.add(chat_id)
+        bot.send_message(chat_id=chat_id, text="Subscribed.")
+
+    def unsubscribe(self, bot, update):
+        chat_id = update.message.chat_id
+        Notificator._subscribers.remove(chat_id)
+        bot.send_message(chat_id=chat_id, text="Unsubscribed.")
+
+    def notify(self, cause):
+        if Notificator._bot:
+            for chat_id in Notificator._subscribers:
+                Notificator._bot.send_message(chat_id=chat_id, text=cause)
 
 
 song_names = pylru.lrucache(512)
@@ -251,8 +287,8 @@ def answer_queue(bot, update):
 
 
 def answer_current_song(bot, update):
-    bot.send_message(chat_id=update.message.chat_id, text="Now playing: {}".format(
-        queued_player.get_current_song()['name']))
+    bot.send_message(
+        chat_id=update.message.chat_id, text=get_current_song_message())
 
 
 def set_admin(bot, update):
@@ -286,7 +322,7 @@ def skip(bot, update):
     @keyboard_answer_handler
     def _skip_action(queue_position):
         queue_position -= 1
-        queued_player.skip_song(queue_position=queue_position)
+        queued_player.skip_song(queue_position)
         hide_keyboard(bot, chat_id, get_queue_message())
         del keyboard_sent[chat_id]
 
@@ -687,7 +723,7 @@ def remove_from_playlist(bot, update):
 
 def run_player():
     global queued_player
-    queued_player = player.Player(api)
+    queued_player = player.Player(api, Notificator())
     queued_player.run()
 
 
@@ -704,6 +740,11 @@ def start_gmusic_bot():
     dispatcher.add_handler(CommandHandler('currentsong', answer_current_song))
     dispatcher.add_handler(CommandHandler('cancel', cancel_keyboard))
     dispatcher.add_handler(CommandHandler('login', login))
+
+    notificator = Notificator()
+    dispatcher.add_handler(CommandHandler('subscribe', notificator.subscribe))
+    dispatcher.add_handler(
+        CommandHandler('unsubscribe', notificator.unsubscribe))
 
     # gmusic_password protected commands
     dispatcher.add_handler(CommandHandler('next', next_song))
