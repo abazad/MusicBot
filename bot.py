@@ -652,6 +652,37 @@ def exit_bot_command(bot, update):
     exit_bot()
 
 
+@multithreaded_command
+@admin_command
+def remove_from_playlist(bot, update):
+    chat_id = update.message.chat_id
+    playlist = queued_player.get_remote_playlist()
+
+    if not playlist:
+        bot.send_message(chat_id=chat_id, text="The playlist is empty.")
+        return
+
+    def _action(bot, update):
+        text = update.message.text
+        if "|" not in text:
+            return
+
+        store_id = text.split("|")[1].strip()
+        if store_id not in playlist:
+            bot.send_message(
+                chat_id=chat_id, text="That song is not in the BotPlaylist")
+
+        queued_player.remove_from_remote_playlist(store_id)
+        hide_keyboard(
+            bot, chat_id, "Removed from playlist: " + lookup_gmusic_song_name(store_id))
+
+    keyboard_items = list(map(lambda song: "{} | {}".format(song[0], song[1]), sorted(
+        map(lambda store_id: (lookup_gmusic_song_name(store_id), store_id), playlist), key=lambda item: item[0])))
+
+    send_keyboard(bot, chat_id,
+                  "What song should be removed?", keyboard_items, _action)
+
+
 # Onetime bot startup methods
 
 def run_player():
@@ -691,6 +722,8 @@ def start_gmusic_bot():
     dispatcher.add_handler(CommandHandler('setpassword', set_password))
     dispatcher.add_handler(CommandHandler('banuser', ban_user))
     dispatcher.add_handler(CommandHandler('setquality', set_quality))
+    dispatcher.add_handler(
+        CommandHandler('stationremove', remove_from_playlist))
 
     dispatcher.add_handler(InlineQueryHandler(get_gmusic_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(gmusic_queue))

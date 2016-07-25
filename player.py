@@ -1,14 +1,13 @@
+from gmusicapi.exceptions import CallFailure
 import json
 import os
+import pafy
+from pydub import AudioSegment
 from random import choice
+import re
 import threading
 import time
 import urllib
-import re
-
-from gmusicapi.exceptions import CallFailure
-import pafy
-from pydub import AudioSegment
 
 
 config_file = open("config.json", "r")
@@ -20,7 +19,7 @@ quality = config['quality']
 song_path = config['song_path']
 
 if not re.compile(r'[ \S]+(\\|\/)$').match(song_path):
-    song_path+="/"
+    song_path += "/"
 
 if not os.path.isdir(song_path):
     try:
@@ -96,7 +95,6 @@ def get_gmusic_loader(api, store_id):
 
                 request = urllib.request.Request(url)
                 page = urllib.request.urlopen(request)
-
 
                 mp3_fname_tmp = mp3_fname + ".tmp"
                 if os.path.isfile(mp3_fname_tmp):
@@ -207,6 +205,32 @@ class SongProvider(object):
         self._last_played.append(store_id)
         if len(self._last_played) > 20:
             self._last_played = self._last_played[-20::]
+
+    def get_playlist_content(self):
+        return self._playlist_entries
+
+    def remove_from_playlist(self, store_id):
+        if store_id in self._playlist_entries:
+            playlist_contents = self._api.get_all_user_playlist_contents()
+
+            tracks = None
+            for playlist in playlist_contents:
+                if playlist['id'] == self._playlist_id:
+                    tracks = playlist['tracks']
+                    break
+
+            if not tracks:
+                return
+
+            track = list(filter(lambda t: t['trackId'] == store_id, tracks))
+            if not track:
+                return
+
+            track = dict(track[0])
+            entry_id = track['id']
+
+            self._api.remove_entries_from_playlist(entry_id)
+            self._playlist_entries.remove(store_id)
 
     def _create_playlist(self):
         if not self._playlist_id:
@@ -367,6 +391,12 @@ class Player(object):
 
     def clear_queue(self):
         self._queue.clear()
+
+    def get_remote_playlist(self):
+        return self._queue._song_provider.get_playlist_content()
+
+    def remove_from_remote_playlist(self, store_id):
+        self._queue._song_provider.remove_from_playlist(store_id)
 
     def _on_song_end(self):
         if not self._lock.acquire(blocking=False):
