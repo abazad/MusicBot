@@ -1,0 +1,14 @@
+[Section1]
+#repo=:user/:repoName
+repo=BjoernPetersen/TelegramMusicBot
+#whitelist = 1 blacklist = 0
+whitelist=0
+
+#directory
+#file
+#thetabs are necessary (also for new items)
+list=.gitignore
+    .project
+    .pydevproject
+    secrets.json
+    config.json
