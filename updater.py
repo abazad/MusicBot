@@ -1,4 +1,3 @@
-import codecs
 import configparser
 import hashlib
 import json
@@ -30,28 +29,28 @@ def go_through_files(data):
 
         try:  # check if the file is there
             # hash the current file
-            f = codecs.open(content["name"], "rb+", "utf-8")
-            sha1 = hashlib.sha1()
-            sha1.update(f.read().encode('utf-8'))
-            hashoff = format(sha1.hexdigest())
-
+            with open(content["name"], "r", encoding="utf-8") as f:
+                sha1 = hashlib.sha1()
+                sha1.update(f.read().encode("utf-8"))
+                hashoff = format(sha1.hexdigest())
         except IOError:  # if no file is offline always download
-            f = codecs.open(content["name"], "w", "utf-8")
-            hashoff = "null"
+            hashoff = None
 
         # downlaod the most recent file
         resp = requests.get(url=content["download_url"])
 
-        # hash the most recent file
-        sha1 = hashlib.sha1()
-        sha1.update(resp.text.encode('utf-8'))
-        hashon = format(sha1.hexdigest())
+        if hashoff:
+            # hash the most recent file
+            sha1 = hashlib.sha1()
+            sha1.update(resp.text.encode('utf-8'))
+            hashon = format(sha1.hexdigest())
 
         # compare hash of the offline and online file and overwrite if they are
         # different
-        if hashon != hashoff:
+        if not hashoff or (hashon != hashoff):
             print("difference found, updating")
-            f.write(resp.text)
+            with open(content["name"], "w", encoding="utf-8") as f:
+                f.write(resp.text)
         else:
             print("no difference found")
 
