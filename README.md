@@ -2,7 +2,7 @@
 This bot lets users select songs from Google Play Music to play on the bot host machine
 
 ## Installation:
-- Works with Python 3+
+- Works only with Python 3+
 - Should be completely platform independent, as long as all dependencies are available
   - tested on Raspbian, Ubuntu, Windows
 - You'll need to provide in the secrets.json:
@@ -23,6 +23,7 @@ This bot lets users select songs from Google Play Music to play on the bot host 
     - a telegram bot token for a third bot
       - this bot will only handle inline queries, no commands
       - except for the commands list, the bot should be configured exactly like the GMusic bot
+- For further installation instructions, see the installation files for [Windows](INSTALLATION_windows.md) or [Linux](INSTALLATION_linux.md)
 
 ## Commands:
 * /currentsong - shows the name of the currently playing song
@@ -50,15 +51,12 @@ This bot lets users select songs from Google Play Music to play on the bot host 
 
 ## Dependencies:
   - [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
-  - [gmusicapi](https://github.com/simon-weber/gmusicapi) (needs libssl-dev, libffi-dev and libav or ffmpeg)
-  - [pydub](https://github.com/jiaaro/pydub) (needs libav or ffmpeg "apt-get install libav-tools libavcodec-extra-5x")
-  - [simpleaudio](https://github.com/hamiltron/py-simple-audio) (needs alsa, "apt-get install libasound2-dev")
+  - [gmusicapi](https://github.com/simon-weber/gmusicapi)
+  - [pydub](https://github.com/jiaaro/pydub)
+  - [simpleaudio](https://github.com/hamiltron/py-simple-audio)
   - [pylru](https://github.com/jlhutch/pylru)
   - If you want to be able to queue youtube songs
     - [pafy](https://github.com/mps-youtube/pafy)
     - [youtube-dl](https://github.com/rg3/youtube-dl)
   - If you want to be able to queue soundcloud songs
     - [soundcloud](https://github.com/soundcloud/soundcloud-python)
-  
-## Contributions:
-All contributions are welcome, please make pull requests against the dev branch
