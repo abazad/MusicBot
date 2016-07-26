@@ -10,5 +10,5 @@
     - use snake_case for methods, variables, packages and modules
     - use CamelCase for classes
     - use a leading underscore for _private_methods.
-- Remove unneccessary print calls
+- Remove unnecessary print calls
 - Encode all source files with UTF-8
