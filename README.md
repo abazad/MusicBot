@@ -34,6 +34,8 @@ This bot lets users select songs from Google Play Music to play on the bot host 
 * /pause - pause playback
 * /play - resume playback
 * /login - login into a password protected session
+* /subscribe - subscribe to queue updates
+* /unsubscribe - unsubscribe from queue updates
 
 ### Admin commands (should not be sent to the botfather)
 * /admin - register as admin (only possible once)
