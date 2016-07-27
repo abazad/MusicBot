@@ -6,7 +6,7 @@ import requests
 
 # get config
 config = configparser.ConfigParser()
-config.readfp(open('updater.settings'))
+config.read_file(open('updater.settings'))
 repoName = config.get("Section1", "repo")
 whitelist = config.getboolean("Section1", "whitelist")
 BoWList = config.get("Section1", "list").split("\n")
