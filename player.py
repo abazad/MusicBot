@@ -2,7 +2,7 @@ from gmusicapi.exceptions import CallFailure
 import json
 import os
 import pafy
-from pydub import AudioSegment
+from pydub import AudioSegment, effects
 from random import choice
 import re
 import threading
@@ -56,7 +56,7 @@ def get_youtube_loader(video_id):
 
             convert_semaphore.acquire()
             song = AudioSegment.from_file(video_fname, audio.extension)
-            song = song.normalize()
+            song = effects.normalize(song)
             fname_tmp = fname + ".tmp"
             if os.path.isfile(fname_tmp):
                 os.remove(fname_tmp)
@@ -109,7 +109,7 @@ def get_gmusic_loader(api, store_id):
 
             convert_semaphore.acquire()
             song = AudioSegment.from_mp3(mp3_fname)
-            song = song.normalize()
+            song = effects.normalize(song)
             fname_tmp = fname + ".tmp"
             if os.path.isfile(fname_tmp):
                 os.remove(fname_tmp)
@@ -149,7 +149,7 @@ def get_soundcloud_loader(client, track):
 
             convert_semaphore.acquire()
             song = AudioSegment.from_mp3(mp3_fname)
-            song = song.normalize()
+            song = effects.normalize(song)
             fname_tmp = fname + ".tmp"
             if os.path.isfile(fname_tmp):
                 os.remove(fname_tmp)
