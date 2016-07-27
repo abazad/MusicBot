@@ -77,8 +77,8 @@ def handle_message(bot, update):
         action(bot, update)
 
 
-def user_tuple_from_user(gmusic_user):
-    return (gmusic_user.id,  gmusic_user.first_name)
+def user_tuple_from_user(user):
+    return (user.id,  user.first_name)
 
 
 def is_logged_in(user):
@@ -617,12 +617,12 @@ def set_password(bot, update):
             chat_id=chat_id, text="Usage: /setpassword [password]")
         return
 
-    gmusic_password = split[1].strip()
-    if not gmusic_password:
+    password = split[1].strip()
+    if not password:
         bot.send_message(chat_id=chat_id, text="Password can't be empty")
         return
 
-    session_password = gmusic_password
+    session_password = password
     session_clients.add(user_tuple_from_user(update.message.from_user))
     bot.send_message(
         chat_id=chat_id, text="Successfully changed password")
