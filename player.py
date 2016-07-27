@@ -290,7 +290,9 @@ class SongProvider(object):
 class SongQueue(list):
 
     def __init__(self, song_provider, notificator):
+        super().__init__()
         self._song_provider = song_provider
+        self._next_random = None
         self._prepare_next()
         self._lock = threading.Lock()
         self._notificator = notificator
