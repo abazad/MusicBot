@@ -4,6 +4,7 @@ from gmusicapi.clients.mobileclient import Mobileclient
 import json
 import multiprocessing
 from os import path
+import os
 import pylru
 from signal import SIGTERM
 import socket
@@ -827,6 +828,7 @@ with open("config.json", "r") as config_file:
     config = json.loads(config_file.read())
     secrets_location = config.get('secrets_location', "")
     secrets_path = path.join(secrets_location, "secrets.json")
+    enable_updates = config.get("auto_updates", 0)
     del config
 
 with open(secrets_path, "r") as secrets_file:
@@ -861,6 +863,13 @@ else:
 session_password = None
 if admin_chat_id:
     session_password = " "
+
+if enable_updates:
+    import updater
+    if updater.update():
+        print("Restarting after update")
+        os.execl(sys.executable, sys.executable, *sys.argv)
+        exit(0)
 
 
 api = Mobileclient(debug_logging=False)

@@ -3,5 +3,6 @@
     "max_conversions": 1,
     "quality": "med",
     "secrets_location": "",
-    "song_path": "songs"
+    "song_path": "songs",
+    "auto_updates": 1
 }
