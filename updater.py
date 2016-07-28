@@ -12,7 +12,8 @@ whitelist = config.getboolean("Section1", "whitelist")
 BoWList = config.get("Section1", "list").split("\n")
 
 
-def go_through_files(data):
+def _go_through_files(data):
+    updated = False
     for content in data:
         print(content["name"])
 
@@ -25,7 +26,8 @@ def go_through_files(data):
         if(content["type"] == "dir"):
             resp = requests.get(
                 url="https://api.github.com/repos/" + repoName + "/contents/" + content["name"])
-            go_through_files(json.loads(resp.text))
+            if _go_through_files(json.loads(resp.text)):
+                updated = True
 
         try:  # check if the file is there
             # hash the current file
@@ -48,17 +50,27 @@ def go_through_files(data):
         # compare hash of the offline and online file and overwrite if they are
         # different
         if not hashoff or (hashon != hashoff):
+            updated = True
             print("difference found, updating")
             with open(content["name"], "w", encoding="utf-8") as f:
                 f.write(resp.text)
         else:
             print("no difference found")
+    return updated
 
 
-# main
-# get a list of files in the repo
-resp = requests.get(
-    url="https://api.github.com/repos/" + repoName + "/contents")
-data = json.loads(resp.text)
-# check these files
-go_through_files(data)
+def update():
+    # get a list of files in the repo
+    resp = requests.get(
+        url="https://api.github.com/repos/" + repoName + "/contents")
+    data = json.loads(resp.text)
+    # check these files
+    return _go_through_files(data)
+
+
+def main():
+    update()
+
+
+if __name__ == '__main__':
+    main()
