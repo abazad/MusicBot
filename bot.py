@@ -140,6 +140,10 @@ class Notificator(object):
             for chat_id in Notificator._subscribers:
                 Notificator._bot.send_message(chat_id=chat_id, text=cause)
 
+    @staticmethod
+    def is_subscriber(chat_id):
+        return chat_id in Notificator._subscribers
+
 
 song_names = pylru.lrucache(512)
 
@@ -387,7 +391,8 @@ def next_song(bot, update):
     # Sorry.
     def _next_job():
         queued_player.next()
-        answer_current_song(bot, update)
+        if not Notificator.is_subscriber(update.message.chat_id):
+            answer_current_song(bot, update)
     threading.Thread(target=_next_job, name="next_thread").start()
 
 
