@@ -886,6 +886,9 @@ if not api.login(gmusic_user, gmusic_password, gmusic_device_id, "de_DE"):
     print("Failed to log in to gmusic")
     sys.exit(1)
 
+if youtube_token and youtube_api_key:
+    import pafy
+
 if soundcloud_id and soundcloud_token:
     import soundcloud
     soundcloud_client = soundcloud.Client(client_id=soundcloud_id)
@@ -896,29 +899,33 @@ youtube_updater = None
 soundcloud_updater = None
 
 
-start_gmusic_bot()
+def main():
+    global youtube_updater
+    global soundcloud_updater
 
-if youtube_token and youtube_api_key:
-    import pafy
-    start_youtube_bot()
-else:
-    youtube_updater = True
+    start_gmusic_bot()
 
-if soundcloud_token and soundcloud_id:
-    start_soundcloud_bot()
-else:
-    soundcloud_updater = True
+    if youtube_token and youtube_api_key:
+        start_youtube_bot()
+    else:
+        youtube_updater = True
 
+    if soundcloud_token and soundcloud_id:
+        start_soundcloud_bot()
+    else:
+        soundcloud_updater = True
 
-player_thread = threading.Thread(target=run_player, name="player_thread")
-player_thread.start()
+    player_thread = threading.Thread(target=run_player, name="player_thread")
+    player_thread.start()
 
+    # Wait until all updaters are initialized
+    while(not (gmusic_updater and youtube_updater and soundcloud_updater)):
+        sleep(1)
+    try:
+        gmusic_updater.idle()
+    except InterruptedError:
+        pass
+    exit_bot(True)
 
-# Wait until all updaters are initialized
-while(not (gmusic_updater and youtube_updater and soundcloud_updater)):
-    sleep(1)
-try:
-    gmusic_updater.idle()
-except InterruptedError:
-    pass
-exit_bot(True)
+if __name__ == "__main__":
+    main()
