@@ -866,10 +866,11 @@ if admin_chat_id:
 
 if enable_updates:
     import updater
-    if updater.update():
-        print("Restarting after update")
-        os.execl(sys.executable, sys.executable, *sys.argv)
-        exit(0)
+    with open(os.devnull, 'w') as devnull:
+        if updater.update(output=devnull):
+            print("Restarting after update")
+            os.execl(sys.executable, sys.executable, *sys.argv)
+            exit(0)
 
 
 api = Mobileclient(debug_logging=False)
