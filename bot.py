@@ -865,12 +865,15 @@ if admin_chat_id:
     session_password = " "
 
 if enable_updates:
+    print("Checking for updates...")
     import updater
     with open(os.devnull, 'w') as devnull:
         if updater.update(output=devnull):
-            print("Restarting after update")
+            print("Restarting after update...")
             os.execl(sys.executable, sys.executable, *sys.argv)
             exit(0)
+        else:
+            print("No updates found.")
 
 
 api = Mobileclient(debug_logging=False)
