@@ -119,22 +119,22 @@ class Notificator(object):
     _subscribers = set()
     _bot = None
 
-    def __init__(self):
-        pass
-
-    def subscribe(self, bot, update):
+    @staticmethod
+    def subscribe(bot, update):
         if not Notificator._bot:
             Notificator._bot = bot
         chat_id = update.message.chat_id
         Notificator._subscribers.add(chat_id)
         bot.send_message(chat_id=chat_id, text="Subscribed.")
 
-    def unsubscribe(self, bot, update):
+    @staticmethod
+    def unsubscribe(bot, update):
         chat_id = update.message.chat_id
         Notificator._subscribers.remove(chat_id)
         bot.send_message(chat_id=chat_id, text="Unsubscribed.")
 
-    def notify(self, cause):
+    @staticmethod
+    def notify(cause):
         if Notificator._bot:
             for chat_id in Notificator._subscribers:
                 Notificator._bot.send_message(chat_id=chat_id, text=cause)
@@ -723,7 +723,7 @@ def remove_from_playlist(bot, update):
 
 def run_player():
     global queued_player
-    queued_player = player.Player(api, Notificator())
+    queued_player = player.Player(api, Notificator)
     queued_player.run()
 
 
@@ -741,10 +741,9 @@ def start_gmusic_bot():
     dispatcher.add_handler(CommandHandler('cancel', cancel_keyboard))
     dispatcher.add_handler(CommandHandler('login', login))
 
-    notificator = Notificator()
-    dispatcher.add_handler(CommandHandler('subscribe', notificator.subscribe))
+    dispatcher.add_handler(CommandHandler('subscribe', Notificator.subscribe))
     dispatcher.add_handler(
-        CommandHandler('unsubscribe', notificator.unsubscribe))
+        CommandHandler('unsubscribe', Notificator.unsubscribe))
 
     # gmusic_password protected commands
     dispatcher.add_handler(CommandHandler('next', next_song))
