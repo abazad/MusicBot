@@ -9,7 +9,7 @@ config = configparser.ConfigParser()
 config.read_file(open('updater.settings'))
 repoName = config.get("Section1", "repo")
 whitelist = config.getboolean("Section1", "whitelist")
-BoWList = config.get("Section1", "list").split("\n")
+BoWList = str(config.get("Section1", "list")).split("\n")
 
 
 def _go_through_files(data, file=sys.stdout):
