@@ -4,5 +4,6 @@
     "quality": "med",
     "secrets_location": "",
     "song_path": "songs",
-    "auto_updates": 0
+    "auto_updates": 0,
+    "suggest_songs": 1
 }

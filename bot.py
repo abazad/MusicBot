@@ -1,6 +1,7 @@
 from concurrent.futures.thread import ThreadPoolExecutor
 from enum import Enum
 from gmusicapi.clients.mobileclient import Mobileclient
+from gmusicapi.exceptions import CallFailure
 import json
 import multiprocessing
 from os import path
@@ -154,7 +155,10 @@ def lookup_gmusic_song_name(store_id):
     elif store_id in song_names:
         return song_names[store_id]
     else:
-        info = api.get_track_info(store_id)
+        try:
+            info = api.get_track_info(store_id)
+        except CallFailure:
+            return store_id
         title = "{} - {}".format(info["artist"], info["title"])
         song_names[store_id] = title
         return title
@@ -407,10 +411,18 @@ def get_gmusic_inline_handler():
         return songs
 
     def _get_inline_result_article(song):
-        song_id = song["storeId"]
+        if "store_id" in song:
+            song_id = song['store_id']
+        else:
+            song_id = song["storeId"]
         song_title = song["title"]
         artist = song["artist"]
         song_str = "{} - {}".format(artist, song_title)
+
+        # Manually save the song name since it's impossible to retrieve song
+        # info from uploaded songs (which can occur in the radio station songs)
+        song_names[song_id] = song_str
+
         result = InlineQueryResultArticle(
             id=song_id,
             title=song_title,
@@ -434,11 +446,14 @@ def get_gmusic_inline_handler():
             return
 
         query = update.inline_query.query
-        if not query:
+        if query:
+            song_list = _search_song(query)
+        elif enable_suggestions:
+            song_list = queued_player.get_song_suggestions(20)
+        else:
             return
 
-        search_results = _search_song(query)
-        results = list(map(_get_inline_result_article, search_results))
+        results = list(map(_get_inline_result_article, song_list))
         bot.answerInlineQuery(update.inline_query.id, results)
 
     return _inline_handler
@@ -834,6 +849,7 @@ with open("config.json", "r") as config_file:
     secrets_location = config.get('secrets_location', "")
     secrets_path = path.join(secrets_location, "secrets.json")
     enable_updates = config.get("auto_updates", 0)
+    enable_suggestions = config.get("suggest_songs", 0)
     del config
 
 with open(secrets_path, "r") as secrets_file:

@@ -3,7 +3,6 @@ import json
 import os
 import pafy
 from pydub import AudioSegment, effects
-from random import choice
 import re
 import threading
 import time
@@ -170,6 +169,7 @@ class SongProvider(object):
         self._playlist_token = None
         self._station_id = None
         self._last_played = []
+        self._next_songs = []
         self._try_restore_ids()
         self._playlist_entries = self._get_playlist_entries()
 
@@ -177,22 +177,11 @@ class SongProvider(object):
         self._create_playlist()
         if not self._station_id:
             self._create_station()
-        song = self._api.get_station_tracks(
-            self._station_id, recently_played_ids=self._last_played)
-        if song:
-            song = choice(song)
-            store_id = song['storeId']
-            name = "{} - {}".format(song["artist"], song["title"])
-            song = {'store_id': store_id,
-                    'load_song': get_gmusic_loader(self._api, store_id),
-                    'name': name}
-            self._last_played.append(store_id)
-            return song
-        # Fallback song
-        store_id = "Tj6fhurtstzgdpvfm4xv6i5cei4"
-        return {'store_id': store_id,
-                'load_song': get_gmusic_loader(self._api, store_id),
-                'name': "Mickie Krause - Biste braun, kriegste Fraun"}
+        song = self.get_suggestions(1)[0]
+        self._next_songs.pop(0)
+        store_id = song['store_id']
+        self._last_played.append(store_id)
+        return song
 
     def add_played(self, song):
         self._create_playlist()
@@ -203,8 +192,9 @@ class SongProvider(object):
             self._playlist_entries.add(store_id)
 
         self._last_played.append(store_id)
-        if len(self._last_played) > 20:
-            self._last_played = self._last_played[-20::]
+        self._next_songs.remove(store_id)
+        if len(self._last_played) > 50:
+            self._last_played = self._last_played[-50::]
 
     def get_playlist_content(self):
         return self._playlist_entries
@@ -231,6 +221,39 @@ class SongProvider(object):
 
             self._api.remove_entries_from_playlist(entry_id)
             self._playlist_entries.remove(store_id)
+
+    def get_suggestions(self, count):
+        def _song_from_api_song(song):
+            if "storeId" in song:
+                store_id = song['storeId']
+            elif "id" in song:
+                store_id = song['id']
+            else:
+                return None
+
+            name = "{} - {}".format(song["artist"], song["title"])
+            song['store_id'] = store_id
+            song['load_song'] = get_gmusic_loader(self._api, store_id)
+            song['name'] = name
+
+            return song
+
+        next_len = len(self._next_songs)
+        if next_len < count:
+            api_songs = self._api.get_station_tracks(
+                self._station_id, recently_played_ids=self._last_played, num_tracks=max(25, count - next_len))
+            if api_songs:
+                self._next_songs.extend(
+                    filter(lambda s: s, map(_song_from_api_song, api_songs)))
+            elif not self._next_songs:
+                # Fallback song
+                store_id = "Tj6fhurtstzgdpvfm4xv6i5cei4"
+                return [{'store_id': store_id,
+                         'load_song': get_gmusic_loader(self._api, store_id),
+                         'name': "Mickie Krause - Biste braun, kriegste Fraun"}] * count
+            else:
+                return self._next_songs
+        return self._next_songs[:count]
 
     def _create_playlist(self):
         if not self._playlist_id:
@@ -291,7 +314,7 @@ class SongQueue(list):
 
     def __init__(self, song_provider, notificator):
         super().__init__()
-        self._song_provider = song_provider
+        self.song_provider = song_provider
         self._next_random = None
         self._prepare_next()
         self._lock = threading.Lock()
@@ -299,7 +322,7 @@ class SongQueue(list):
 
     def _prepare_next(self):
         print("PREPARING")
-        next_song = self._song_provider.get_song()
+        next_song = self.song_provider.get_song()
         fname = next_song['load_song']()
         next_song['load_song'] = lambda: fname
         self._next_random = next_song
@@ -313,7 +336,7 @@ class SongQueue(list):
             # All gmusic store ids start with T and are 27 chars long
             store_id = result['store_id']
             if store_id.startswith("T") and len(store_id) == 27:
-                self._song_provider.add_played(result)
+                self.song_provider.add_played(result)
         except IndexError:
             if self._lock.acquire(blocking=False):
                 while self._next_random is None:
@@ -341,7 +364,7 @@ class SongQueue(list):
         threading.Thread(target=_append, name="append_thread").start()
 
     def reset(self):
-        self._song_provider.reset()
+        self.song_provider.reset()
 
 
 class Player(object):
@@ -392,10 +415,13 @@ class Player(object):
         self._queue.clear()
 
     def get_remote_playlist(self):
-        return self._queue._song_provider.get_playlist_content()
+        return self._queue.song_provider.get_playlist_content()
 
     def remove_from_remote_playlist(self, store_id):
-        self._queue._song_provider.remove_from_playlist(store_id)
+        self._queue.song_provider.remove_from_playlist(store_id)
+
+    def get_song_suggestions(self, count=20):
+        return self._queue.song_provider.get_suggestions(count)
 
     def _on_song_end(self):
         if not self._lock.acquire(blocking=False):
