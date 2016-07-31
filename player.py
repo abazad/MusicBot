@@ -369,14 +369,16 @@ class SongQueue(list):
 
 class Player(object):
 
-    def __init__(self, api, notificator):
+    def __init__(self, api, notificator, song_provider=None):
         import simpleaudio
         self._sa = simpleaudio
         self._player = None
         self._stop = False
         self._pause = False
         self._api = api
-        self._queue = SongQueue(SongProvider(api), notificator)
+        if not song_provider:
+            song_provider = SongProvider(api)
+        self._queue = SongQueue(song_provider, notificator)
         self._current_song = None
         self._lock = threading.Lock()
         self._barrier = threading.Barrier(2)
