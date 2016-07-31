@@ -425,7 +425,7 @@ class Player(object):
 
     def _on_song_end(self):
         if not self._lock.acquire(blocking=False):
-            if threading.current_thread().name != "next_thread":
+            if threading.current_thread().name == "player_thread":
                 self._barrier.wait()
             return
         song = self._queue.pop(0)
@@ -442,17 +442,19 @@ class Player(object):
         NotificationCause = self._notificator.NotificationCause
         self._notificator.notify(NotificationCause.next_song())
 
-        if threading.current_thread().name == "next_thread":
+        if threading.current_thread().name != "player_thread":
             self._barrier.wait()
         self._lock.release()
 
     def run(self):
-        while not self._stop:
-            if self._pause:
-                time.sleep(1)
-            else:
-                self._on_song_end()
-                self._player.wait_done()
+        def _run():
+            while not self._stop:
+                if self._pause:
+                    time.sleep(1)
+                else:
+                    self._on_song_end()
+                    self._player.wait_done()
+        threading.Thread(name="player_thread", target=_run).start()
 
     def close(self):
         self._stop = True

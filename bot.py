@@ -21,6 +21,7 @@ from telegram.ext import InlineQueryHandler, ChosenInlineResultHandler
 from telegram.ext.updater import Updater
 from telegram.replykeyboardhide import ReplyKeyboardHide
 
+from player import Player
 import player
 
 
@@ -742,12 +743,6 @@ def remove_from_playlist(bot, update):
 
 # Onetime bot startup methods
 
-def run_player():
-    global queued_player
-    queued_player = player.Player(api, Notificator)
-    queued_player.run()
-
-
 def start_gmusic_bot():
     global gmusic_updater
     gmusic_updater = Updater(token=gmusic_token)
@@ -909,7 +904,7 @@ if soundcloud_id and soundcloud_token:
     import soundcloud
     soundcloud_client = soundcloud.Client(client_id=soundcloud_id)
 
-queued_player = None
+queued_player = Player(api, Notificator)
 gmusic_updater = None
 youtube_updater = None
 soundcloud_updater = None
@@ -931,8 +926,7 @@ def main():
     else:
         soundcloud_updater = True
 
-    player_thread = threading.Thread(target=run_player, name="player_thread")
-    player_thread.start()
+    queued_player.run()
 
     # Wait until all updaters are initialized
     while(not (gmusic_updater and youtube_updater and soundcloud_updater)):
