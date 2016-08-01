@@ -1,12 +1,13 @@
-from gmusicapi.exceptions import CallFailure
 import json
 import os
-import pafy
-from pydub import AudioSegment, effects
 import re
 import threading
 import time
 import urllib
+
+from gmusicapi.exceptions import CallFailure
+import pafy
+from pydub import AudioSegment, effects
 
 
 config_file = open("config.json", "r")

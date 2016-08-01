@@ -1,25 +1,25 @@
 from concurrent.futures.thread import ThreadPoolExecutor
 from enum import Enum
-from gmusicapi.clients.mobileclient import Mobileclient
-from gmusicapi.exceptions import CallFailure
 import json
 import multiprocessing
 from os import path
 import os
-import pylru
 from signal import SIGTERM
 import socket
 import sys
-from telegram import InlineQueryResultArticle, InputTextMessageContent
-from telegram.ext.commandhandler import CommandHandler
-from telegram.ext.messagehandler import MessageHandler, Filters
-from telegram.replykeyboardmarkup import ReplyKeyboardMarkup
 import threading
 from time import sleep
 
+from gmusicapi.clients.mobileclient import Mobileclient
+from gmusicapi.exceptions import CallFailure
+import pylru
+from telegram import InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import InlineQueryHandler, ChosenInlineResultHandler
+from telegram.ext.commandhandler import CommandHandler
+from telegram.ext.messagehandler import MessageHandler, Filters
 from telegram.ext.updater import Updater
 from telegram.replykeyboardhide import ReplyKeyboardHide
+from telegram.replykeyboardmarkup import ReplyKeyboardMarkup
 
 from player import Player
 import player
