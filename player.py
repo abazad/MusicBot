@@ -169,7 +169,7 @@ class SongProvider(object):
         self._playlist_id = None
         self._playlist_token = None
         self._station_id = None
-        self._last_played = []
+        self._last_played_ids = []
         self._next_songs = []
         self._try_restore_ids()
         self._playlist_entries = self._get_playlist_entries()
@@ -181,7 +181,7 @@ class SongProvider(object):
         song = self.get_suggestions(1)[0]
         self._next_songs.pop(0)
         store_id = song['store_id']
-        self._last_played.append(store_id)
+        self._last_played_ids.append(store_id)
         return song
 
     def add_played(self, song):
@@ -192,13 +192,13 @@ class SongProvider(object):
             self._api.add_songs_to_playlist(self._playlist_id, store_id)
             self._playlist_entries.add(store_id)
 
-        self._last_played.append(store_id)
+        self._last_played_ids.append(store_id)
         try:
             self._next_songs.remove(store_id)
         except ValueError:
             pass
-        if len(self._last_played) > 50:
-            self._last_played = self._last_played[-50::]
+        if len(self._last_played_ids) > 50:
+            self._last_played_ids = self._last_played_ids[-50::]
 
     def get_playlist_content(self):
         return self._playlist_entries
@@ -245,7 +245,7 @@ class SongProvider(object):
         next_len = len(self._next_songs)
         if next_len < count:
             api_songs = self._api.get_station_tracks(
-                self._station_id, recently_played_ids=self._last_played, num_tracks=max(25, count - next_len))
+                self._station_id, recently_played_ids=self._last_played_ids, num_tracks=max(25, count - next_len))
             if api_songs:
                 self._next_songs.extend(
                     filter(lambda s: s, map(_song_from_api_song, api_songs)))
