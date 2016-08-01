@@ -240,10 +240,9 @@ class SongProvider(object):
 
             return song
 
-        next_len = len(self._next_songs)
-        if next_len < count:
+        while len(self._next_songs) < count:
             api_songs = self._api.get_station_tracks(
-                self._station_id, recently_played_ids=self._last_played_ids, num_tracks=max(25, count - next_len))
+                self._station_id, recently_played_ids=self._last_played_ids, num_tracks=max(25, count - len(self._next_songs)))
             if api_songs:
                 self._next_songs.extend(
                     filter(lambda s: s, map(_song_from_api_song, api_songs)))
