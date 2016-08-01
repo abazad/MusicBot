@@ -432,7 +432,6 @@ def get_gmusic_inline_handler():
                 if "url" in ref:
                     url = ref["url"]
                     result.thumb_url = url
-
         return result
 
     @multithreaded_command
@@ -447,6 +446,22 @@ def get_gmusic_inline_handler():
             song_list = queued_player.get_song_suggestions(20)
         else:
             return
+
+        # Filter duplicate songs
+        seen = set()
+
+        def _seen_add(song):
+            if "store_id" in song:
+                store_id = song['store_id']
+            else:
+                store_id = song["storeId"]
+            if store_id in seen:
+                return False
+            else:
+                seen.add(store_id)
+                return True
+
+        song_list = filter(_seen_add, song_list)
 
         results = list(map(_get_inline_result_article, song_list))
         bot.answerInlineQuery(update.inline_query.id, results)

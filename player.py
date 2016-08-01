@@ -250,9 +250,12 @@ class SongProvider(object):
             elif not self._next_songs:
                 # Fallback song
                 store_id = "Tj6fhurtstzgdpvfm4xv6i5cei4"
-                return [{'store_id': store_id,
-                         'load_song': get_gmusic_loader(self._api, store_id),
-                         'name': "Mickie Krause - Biste braun, kriegste Fraun"}] * count
+                fallback_song = {'store_id': store_id,
+                                 'load_song': get_gmusic_loader(self._api, store_id),
+                                 'name': "Mickie Krause - Biste braun, kriegste Fraun",
+                                 'artist': "Mickie Krause",
+                                 'title': "Biste braun kriegste Fraun"}
+                self._next_songs.extend([fallback_song] * count)
             else:
                 return self._next_songs
         return self._next_songs[:count]
