@@ -193,7 +193,10 @@ class SongProvider(object):
             self._playlist_entries.add(store_id)
 
         self._last_played.append(store_id)
-        self._next_songs.remove(store_id)
+        try:
+            self._next_songs.remove(store_id)
+        except ValueError:
+            pass
         if len(self._last_played) > 50:
             self._last_played = self._last_played[-50::]
 
