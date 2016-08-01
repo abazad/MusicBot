@@ -193,10 +193,8 @@ class SongProvider(object):
             self._playlist_entries.add(store_id)
 
         self._last_played_ids.append(store_id)
-        try:
-            self._next_songs.remove(store_id)
-        except ValueError:
-            pass
+        self._next_songs = list(
+            filter(lambda song: song['store_id'] != store_id, self._next_songs))
         if len(self._last_played_ids) > 50:
             self._last_played_ids = self._last_played_ids[-50::]
 
