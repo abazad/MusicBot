@@ -387,18 +387,12 @@ def pause(bot, update):
     queued_player.pause()
 
 
+@multithreaded_command
 @password_protected_command
 def next_song(bot, update):
-    # This is not using the threadpool because the thread name is important.
-    #
-    #
-    #
-    # Sorry.
-    def _next_job():
-        queued_player.next()
-        if not Notificator.is_subscriber(update.message.chat_id):
-            answer_current_song(bot, update)
-    threading.Thread(target=_next_job, name="next_thread").start()
+    queued_player.next()
+    if not Notificator.is_subscriber(update.message.chat_id):
+        answer_current_song(bot, update)
 
 
 def get_gmusic_inline_handler():
