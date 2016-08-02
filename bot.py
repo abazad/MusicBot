@@ -889,17 +889,6 @@ session_password = None
 if admin_chat_id:
     session_password = " "
 
-if enable_updates:
-    print("Checking for updates...")
-    import updater
-    with open(os.devnull, 'w') as devnull:
-        if updater.update(output=devnull):
-            print("Restarting after update...")
-            os.execl(sys.executable, sys.executable, *sys.argv)
-            exit(0)
-        else:
-            print("No updates found.")
-
 
 api = Mobileclient(debug_logging=False)
 if not api.login(gmusic_user, gmusic_password, gmusic_device_id, "de_DE"):
@@ -920,6 +909,17 @@ soundcloud_updater = None
 
 
 def main():
+    if enable_updates:
+        print("Checking for updates...")
+        import updater
+        with open(os.devnull, 'w') as devnull:
+            if updater.update(output=devnull):
+                print("Restarting after update...")
+                os.execl(sys.executable, sys.executable, *sys.argv)
+                sys.exit(0)
+            else:
+                print("No updates found.")
+
     global youtube_updater
     global soundcloud_updater
 
