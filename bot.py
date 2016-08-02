@@ -1,6 +1,7 @@
 from concurrent.futures.thread import ThreadPoolExecutor
 from enum import Enum
 import json
+import locale
 import multiprocessing
 from os import path
 import os
@@ -850,6 +851,9 @@ def exit_bot(updater_stopped=False):
 # Load config and secrets
 with open("config.json", "r") as config_file:
     config = json.loads(config_file.read())
+    gmusic_locale = config.get('gmusic_locale', 0)
+    if not gmusic_locale:
+        gmusic_locale = locale.getdefaultlocale()[0]
     secrets_location = config.get('secrets_location', "")
     secrets_path = path.join(secrets_location, "secrets.json")
     enable_updates = config.get("auto_updates", 0)
@@ -891,7 +895,7 @@ if admin_chat_id:
 
 
 api = Mobileclient(debug_logging=False)
-if not api.login(gmusic_user, gmusic_password, gmusic_device_id, "de_DE"):
+if not api.login(gmusic_user, gmusic_password, gmusic_device_id, gmusic_locale):
     print("Failed to log in to gmusic")
     sys.exit(1)
 
