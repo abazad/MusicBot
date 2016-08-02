@@ -9,6 +9,7 @@ import socket
 import sys
 import threading
 from time import sleep
+from yapsy.PluginManager import PluginManager
 
 from gmusicapi.clients.mobileclient import Mobileclient
 from gmusicapi.exceptions import CallFailure
@@ -23,6 +24,7 @@ from telegram.replykeyboardmarkup import ReplyKeyboardMarkup
 
 from player import Player
 import player
+from plugin_handler import PluginLoader
 
 
 # Utility methods
@@ -790,6 +792,10 @@ def start_gmusic_bot():
     dispatcher.add_handler(
         CommandHandler('stationremove', remove_from_playlist))
 
+    # Load additional Commands
+    for plugin in plugin_loader.get_plugins():
+        dispatcher.add_handler(CommandHandler(plugin.get_label(), plugin.run_command))
+
     dispatcher.add_handler(InlineQueryHandler(get_gmusic_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(gmusic_queue))
 
@@ -854,6 +860,7 @@ with open("config.json", "r") as config_file:
     secrets_path = path.join(secrets_location, "secrets.json")
     enable_updates = config.get("auto_updates", 0)
     enable_suggestions = config.get("suggest_songs", 0)
+    load_plugins = config.get("load_plugins", 1)
     del config
 
 with open(secrets_path, "r") as secrets_file:
@@ -899,6 +906,10 @@ if enable_updates:
             exit(0)
         else:
             print("No updates found.")
+
+plugin_loader = PluginLoader()
+if load_plugins:
+    plugin_loader.load_plugins()
 
 
 api = Mobileclient(debug_logging=False)
