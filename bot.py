@@ -576,9 +576,9 @@ def gmusic_queue(bot, update):
         return
 
     song_name = lookup_gmusic_song_name(storeId)
+    print("GM_QUEUED by", user["first_name"], ":", song_name)
     queued_player.queue(
         {'store_id': storeId, 'load_song': player.get_gmusic_loader(api, storeId), 'name': song_name})
-    print("GM_QUEUED by", user["first_name"], ":", song_name)
 
 
 @multithreaded_command
@@ -590,9 +590,9 @@ def youtube_queue(bot, update):
         return
 
     song_name = lookup_youtube_song_name(video_id)
+    print("YT_QUEUED by", user["first_name"], ":", song_name)
     queued_player.queue({'store_id': video_id, 'load_song': player.get_youtube_loader(
         video_id), 'name': song_name})
-    print("YT_QUEUED by", user["first_name"], ":", song_name)
 
 
 @multithreaded_command
@@ -604,9 +604,9 @@ def soundcloud_queue(bot, update):
         return
 
     track = lookup_soundcloud_track(song_id)
+    print("SC_QUEUED by", user["first_name"], ":", track.title)
     queued_player.queue({'store_id': song_id, 'load_song': player.get_soundcloud_loader(
         soundcloud_client, track), 'name': track.title})
-    print("SC_QUEUED by", user["first_name"], ":", track.title)
 
 
 # Admin commands
