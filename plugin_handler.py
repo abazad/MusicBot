@@ -24,7 +24,8 @@ class PluginLoader(object):
             module_info = imp.find_module(name, [plugin_dir])
             try:
                 module = imp.load_module(name, *module_info)
-                if ("get_label" in dir(module)) and ("run_command" in dir(module)):
+                dir_list = dir(module)
+                if ("get_label" in dir_list) and ("run_command" in dir_list):
                     self.plugins.append(module)
                 else:
                     print((Fore.RED + "'{}' is not a valid plugin!" + Fore.RESET).format(filename))
