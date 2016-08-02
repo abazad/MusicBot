@@ -332,7 +332,8 @@ class SongQueue(list):
         self.song_provider = song_provider
         self._next_random = None
         self._prepare_next()
-        self._lock = threading.Lock()
+        self._pop_lock = threading.Lock()
+        self._append_lock = threading.Lock()
         self._notificator = notificator
 
     def _prepare_next(self):
@@ -353,14 +354,14 @@ class SongQueue(list):
             if store_id.startswith("T") and len(store_id) == 27:
                 self.song_provider.add_played(result)
         except IndexError:
-            if self._lock.acquire(blocking=False):
+            if self._pop_lock.acquire(blocking=False):
                 while self._next_random is None:
                     time.sleep(0.2)
                 result = self._next_random
                 self._next_random = None
                 threading.Thread(
                     target=self._prepare_next, name="prepare_thread").start()
-                self._lock.release()
+                self._pop_lock.release()
 
         return result
 
@@ -371,7 +372,16 @@ class SongQueue(list):
             print("LOADING APPENDED SONG")
             fname = song['load_song']()
             song['load_song'] = lambda: fname
-            list.append(self, *args, **kwargs)
+            self._append_lock.acquire()
+            duplicate = False
+            for queue_song in self:
+                if song['store_id'] == queue_song['store_id']:
+                    duplicate = True
+                    break
+
+            if not duplicate:
+                list.append(self, *args, **kwargs)
+            self._append_lock.release()
             print("FINISHED LOADING APPENDED SONG")
             NotificationCause = self._notificator.NotificationCause
             self._notificator.notify(NotificationCause.queue_add(song['name']))
