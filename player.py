@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import socket
 import threading
 import time
 import urllib
@@ -261,7 +262,9 @@ class SongProvider(object):
 
     def _create_playlist(self):
         if not self._playlist_id:
-            self._playlist_id = self._api.create_playlist("BotPlaylist")
+            playlist_name = self._add_identifier_to_playlist_name(
+                "BotPlaylist created on {} at {}")
+            self._playlist_id = self._api.create_playlist(playlist_name)
             self._write_ids()
             playlist = list(filter(
                 lambda p: p['id'] == self._playlist_id, self._api.get_all_playlists()))[0]
@@ -285,10 +288,17 @@ class SongProvider(object):
             result.add(track['track']['storeId'])
         return result
 
+    def _add_identifier_to_playlist_name(self, playlist_name):
+        hostname = socket.gethostname()
+        timestamp = time.strftime("%c")
+        return playlist_name.format(hostname, timestamp)
+
     def _create_station(self):
         if not self._station_id:
+            station_name = self._add_identifier_to_playlist_name(
+                "BotStation created on {} at {}")
             self._station_id = self._api.create_station(
-                "BotStation", playlist_token=self._playlist_token)
+                station_name, playlist_token=self._playlist_token)
             self._write_ids()
 
     def _write_ids(self):
