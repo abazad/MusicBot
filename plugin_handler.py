@@ -1,6 +1,8 @@
 import imp
 import os
 
+from colorama import Fore
+
 plugin_dir = "./plugins"
 
 
@@ -25,9 +27,10 @@ class PluginLoader(object):
                 if ("get_label" in dir(module)) and ("run_command" in dir(module)):
                     self.plugins.append(module)
                 else:
-                    print("\033[0;31m'%s' is not a valid plugin!\033[0m" % filename)
+                    print((Fore.RED + "'{}' is not a valid plugin!" + Fore.RESET).format(filename))
             except Exception as e:
-                print("\033[0;31m%s error while loading plugin '%s': \n %s\033[0m" % (type(e).__name__, filename, e))
+                print((Fore.RED + "{} error while loading plugin '{}': \n {}" + Fore.RESET)
+                      .format((type(e).__name__, filename, e)))
             finally:
                 module_info[0].close()
 
