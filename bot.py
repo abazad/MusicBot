@@ -10,6 +10,7 @@ import sys
 import threading
 from time import sleep
 
+import colorama
 from gmusicapi.clients.mobileclient import Mobileclient
 from gmusicapi.exceptions import CallFailure
 import pylru
@@ -26,7 +27,12 @@ import player
 from plugin_handler import PluginLoader
 
 
+# Initialize colorama for colored output
+colorama.init()
+
+
 # Utility methods
+
 def save_config(file="config.json", *args):
     config_file = open(file, 'r')
     config = json.loads(config_file.read())
