@@ -9,8 +9,12 @@ class PluginLoader(object):
 
     # Load all Plugins present in the plugin_dir directory
     def load_plugins(self):
+        if not os.path.isdir(plugin_dir):
+            return
         possible_plugins = os.listdir(plugin_dir)
         for filename in possible_plugins:
+            if not os.path.isfile(os.path.join(plugin_dir, filename)):
+                continue
             split = filename.split('.')
             if not (len(split) > 1 and split[-1] == "py"):
                 continue
