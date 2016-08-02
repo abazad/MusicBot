@@ -3,15 +3,16 @@ import os
 
 plugin_dir = "./plugins"
 
+
 class PluginLoader(object):
     plugins = []
 
-    #Load all Plugins present in the plugin_dir directory
+    # Load all Plugins present in the plugin_dir directory
     def load_plugins(self):
         possible_plugins = os.listdir(plugin_dir)
         for filename in possible_plugins:
             split = filename.split('.')
-            if not (len(split)>1 and split[-1] == "py"):
+            if not (len(split) > 1 and split[-1] == "py"):
                 continue
             name = "".join(split[:-1])
             module_info = imp.find_module(name, [plugin_dir])
@@ -26,6 +27,6 @@ class PluginLoader(object):
             finally:
                 module_info[0].close()
 
-    #Return a list of loaded plugins
+    # Return a list of loaded plugins
     def get_plugins(self):
         return self.plugins
