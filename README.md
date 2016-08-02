@@ -44,7 +44,7 @@ This bot lets users select songs from Google Play Music to play on the bot host 
 * /ip - get the bot's local IP address
 * /reset - delete the BotPlaylist and BotStation on google play music, reset the admin setting and stop the bot
 * /stop - stop the bot
-* /togglepassword - toggles the session password
+* /togglepassword - toggles the session password on and off
 * /setpassword [password] - sets the session password
 * /banuser - bans a user from the current session and resets the password
 * /setquality [hi/med/low] - sets the gmusic song quality
