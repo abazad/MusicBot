@@ -12,5 +12,5 @@ apt-get install libssl-dev libffi-dev libasound2-dev libav-tools libavcodec-extr
 
 Using pip(3):
 ```
-pip3 install python-telegram-bot gmusicapi youtube-dl pafy pydub simpleaudio pylru soundcloud --upgrade
+pip3 install python-telegram-bot gmusicapi youtube-dl pafy pydub simpleaudio pylru soundcloud colorama --upgrade
 ```

@@ -50,6 +50,7 @@ This bot lets users select songs from Google Play Music to play on the bot host 
 * /setquality [hi/med/low] - sets the gmusic song quality
 
 ## Dependencies:
+  - [colorama](https://github.com/tartley/colorama)
   - [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
   - [gmusicapi](https://github.com/simon-weber/gmusicapi)
   - [pydub](https://github.com/jiaaro/pydub)
