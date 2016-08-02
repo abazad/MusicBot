@@ -9,7 +9,6 @@ import socket
 import sys
 import threading
 from time import sleep
-from yapsy.PluginManager import PluginManager
 
 from gmusicapi.clients.mobileclient import Mobileclient
 from gmusicapi.exceptions import CallFailure
