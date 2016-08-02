@@ -28,7 +28,7 @@ if not os.path.isdir(song_path):
         os.makedirs(song_path)
     except OSError:
         print("'{}' is not a valid directory path. Exiting.".format(song_path))
-        sys.exit()
+        sys.exit(3)
 
 download_semaphore = threading.Semaphore(max_downloads)
 convert_semaphore = threading.Semaphore(max_conversions)
