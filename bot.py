@@ -450,8 +450,11 @@ def get_gmusic_inline_handler():
         query = update.inline_query.query
         if query:
             song_list = _search_song(query)
+            # set server-side caching time to default (300 seconds)
+            cache_time = 300
         elif enable_suggestions:
             song_list = queued_player.get_song_suggestions(20)
+            cache_time = 20
         else:
             return
 
@@ -472,7 +475,7 @@ def get_gmusic_inline_handler():
         song_list = filter(_seen_add, song_list)
 
         results = list(map(_get_inline_result_article, song_list))
-        bot.answerInlineQuery(update.inline_query.id, results)
+        bot.answerInlineQuery(update.inline_query.id, results, cache_time=cache_time)
 
     return _inline_handler
 
