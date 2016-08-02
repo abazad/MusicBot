@@ -3,3 +3,4 @@ secrets.json
 songs/
 __pycache__/
 ids.json
+plugins/

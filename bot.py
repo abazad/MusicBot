@@ -11,6 +11,7 @@ import sys
 import threading
 from time import sleep
 
+import colorama
 from gmusicapi.clients.mobileclient import Mobileclient
 from gmusicapi.exceptions import CallFailure
 import pylru
@@ -24,9 +25,15 @@ from telegram.replykeyboardmarkup import ReplyKeyboardMarkup
 
 from player import Player
 import player
+from plugin_handler import PluginLoader
+
+
+# Initialize colorama for colored output
+colorama.init()
 
 
 # Utility methods
+
 def save_config(file="config.json", *args):
     config_file = open(file, 'r')
     config = json.loads(config_file.read())
@@ -791,6 +798,10 @@ def start_gmusic_bot():
     dispatcher.add_handler(
         CommandHandler('stationremove', remove_from_playlist))
 
+    # Load additional Commands
+    for plugin in plugin_loader.get_plugins():
+        dispatcher.add_handler(CommandHandler(plugin.get_label(), plugin.run_command))
+
     dispatcher.add_handler(InlineQueryHandler(get_gmusic_inline_handler()))
     dispatcher.add_handler(ChosenInlineResultHandler(gmusic_queue))
 
@@ -858,6 +869,7 @@ with open("config.json", "r") as config_file:
     secrets_path = path.join(secrets_location, "secrets.json")
     enable_updates = config.get("auto_updates", 0)
     enable_suggestions = config.get("suggest_songs", 0)
+    load_plugins = config.get("load_plugins", 1)
     del config
 
 with open(secrets_path, "r") as secrets_file:
@@ -893,6 +905,10 @@ session_password = None
 if admin_chat_id:
     session_password = " "
 
+
+plugin_loader = PluginLoader()
+if load_plugins:
+    plugin_loader.load_plugins()
 
 api = Mobileclient(debug_logging=False)
 if not api.login(gmusic_user, gmusic_password, gmusic_device_id, gmusic_locale):

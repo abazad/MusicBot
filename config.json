@@ -1,10 +1,11 @@
 {
     "gmusic_locale": 0,
+    "auto_updates": 0,
+    "load_plugins": 1,
     "max_downloads" : 1,
     "max_conversions": 1,
     "quality": "med",
     "secrets_location": "",
     "song_path": "songs",
-    "auto_updates": 0,
     "suggest_songs": 1
 }

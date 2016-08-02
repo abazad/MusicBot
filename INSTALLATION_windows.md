@@ -8,6 +8,6 @@
 
 In the command line, with pip in your PATH:
 ```
-pip3 install python-telegram-bot gmusicapi youtube-dl pafy pydub simpleaudio pylru soundcloud --upgrade
+pip3 install python-telegram-bot gmusicapi youtube-dl pafy pydub simpleaudio pylru soundcloud colorama --upgrade
 ```
 
