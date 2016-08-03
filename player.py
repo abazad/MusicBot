@@ -15,8 +15,8 @@ from pydub import AudioSegment, effects
 config_file = open("config.json", "r")
 config = json.loads(config_file.read())
 
-max_downloads = config['max_downloads']
-max_conversions = config['max_conversions']
+max_downloads = max(config['max_downloads'], 1)
+max_conversions = max(config['max_conversions'], 1)
 quality = config['quality']
 song_path = config['song_path']
 
