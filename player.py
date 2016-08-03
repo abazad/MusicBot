@@ -49,22 +49,24 @@ def get_youtube_loader(video_id):
         if not os.path.isfile(fname):
             if not os.path.isfile(video_fname):
                 download_semaphore.acquire()
-                video_fname_tmp = video_fname + ".tmp"
-                if os.path.isfile(video_fname_tmp):
-                    os.remove(video_fname_tmp)
-                audio.download(filepath=video_fname_tmp, quiet=True)
-                os.rename(video_fname_tmp, video_fname)
+                if not os.path.isfile(video_fname):
+                    video_fname_tmp = video_fname + ".tmp"
+                    if os.path.isfile(video_fname_tmp):
+                        os.remove(video_fname_tmp)
+                    audio.download(filepath=video_fname_tmp, quiet=True)
+                    os.rename(video_fname_tmp, video_fname)
                 download_semaphore.release()
 
             convert_semaphore.acquire()
-            song = AudioSegment.from_file(video_fname, audio.extension)
-            song = effects.normalize(song)
-            fname_tmp = fname + ".tmp"
-            if os.path.isfile(fname_tmp):
-                os.remove(fname_tmp)
-            song.export(fname_tmp, "wav")
-            os.remove(video_fname)
-            os.rename(fname_tmp, fname)
+            if not os.path.isfile(fname):
+                song = AudioSegment.from_file(video_fname, audio.extension)
+                song = effects.normalize(song)
+                fname_tmp = fname + ".tmp"
+                if os.path.isfile(fname_tmp):
+                    os.remove(fname_tmp)
+                song.export(fname_tmp, "wav")
+                os.remove(video_fname)
+                os.rename(fname_tmp, fname)
             convert_semaphore.release()
 
         return fname
@@ -79,45 +81,47 @@ def get_gmusic_loader(api, store_id):
         if not os.path.isfile(fname):
             if not os.path.isfile(mp3_fname):
                 download_semaphore.acquire()
-                attempts = 3
-                url = None
-                while attempts and not url:
-                    try:
-                        url = api.get_stream_url(store_id, quality=quality)
-                    except CallFailure as e:
-                        # Sometimes, the call returns a 403
-                        attempts -= 1
-                        print(
-                            "403, retrying... ({} attempts left)".format(attempts))
-                        if not attempts:
-                            print(e)
+                if not os.path.isfile(mp3_fname):
+                    attempts = 3
+                    url = None
+                    while attempts and not url:
+                        try:
+                            url = api.get_stream_url(store_id, quality=quality)
+                        except CallFailure as e:
+                            # Sometimes, the call returns a 403
+                            attempts -= 1
+                            print(
+                                "403, retrying... ({} attempts left)".format(attempts))
+                            if not attempts:
+                                print(e)
 
-                if not attempts:
-                    return None  # TODO do something else here
+                    if not attempts:
+                        return None  # TODO do something else here
 
-                request = urllib.request.Request(url)
-                page = urllib.request.urlopen(request)
+                    request = urllib.request.Request(url)
+                    page = urllib.request.urlopen(request)
 
-                mp3_fname_tmp = mp3_fname + ".tmp"
-                if os.path.isfile(mp3_fname_tmp):
-                    os.remove(mp3_fname_tmp)
+                    mp3_fname_tmp = mp3_fname + ".tmp"
+                    if os.path.isfile(mp3_fname_tmp):
+                        os.remove(mp3_fname_tmp)
 
-                file = open(mp3_fname_tmp, "wb")
-                file.write(page.read())
-                file.close()
-                page.close()
-                os.rename(mp3_fname_tmp, mp3_fname)
+                    file = open(mp3_fname_tmp, "wb")
+                    file.write(page.read())
+                    file.close()
+                    page.close()
+                    os.rename(mp3_fname_tmp, mp3_fname)
                 download_semaphore.release()
 
             convert_semaphore.acquire()
-            song = AudioSegment.from_mp3(mp3_fname)
-            song = effects.normalize(song)
-            fname_tmp = fname + ".tmp"
-            if os.path.isfile(fname_tmp):
-                os.remove(fname_tmp)
-            song.export(fname_tmp, "wav")
-            os.remove(mp3_fname)
-            os.rename(fname_tmp, fname)
+            if not os.path.isfile(fname):
+                song = AudioSegment.from_mp3(mp3_fname)
+                song = effects.normalize(song)
+                fname_tmp = fname + ".tmp"
+                if os.path.isfile(fname_tmp):
+                    os.remove(fname_tmp)
+                song.export(fname_tmp, "wav")
+                os.remove(mp3_fname)
+                os.rename(fname_tmp, fname)
             convert_semaphore.release()
 
         return fname
@@ -134,30 +138,32 @@ def get_soundcloud_loader(client, track):
         if not os.path.isfile(fname):
             if not os.path.isfile(mp3_fname):
                 download_semaphore.acquire()
-                mp3_fname_tmp = mp3_fname + ".tmp"
-                if os.path.isfile(mp3_fname_tmp):
-                    os.remove(mp3_fname_tmp)
+                if not os.path.isfile(mp3_fname):
+                    mp3_fname_tmp = mp3_fname + ".tmp"
+                    if os.path.isfile(mp3_fname_tmp):
+                        os.remove(mp3_fname_tmp)
 
-                request = urllib.request.Request(url)
-                page = urllib.request.urlopen(request)
+                    request = urllib.request.Request(url)
+                    page = urllib.request.urlopen(request)
 
-                file = open(mp3_fname_tmp, "wb")
-                file.write(page.read())
-                file.close()
-                page.close()
+                    file = open(mp3_fname_tmp, "wb")
+                    file.write(page.read())
+                    file.close()
+                    page.close()
 
-                os.rename(mp3_fname_tmp, mp3_fname)
+                    os.rename(mp3_fname_tmp, mp3_fname)
                 download_semaphore.release()
 
             convert_semaphore.acquire()
-            song = AudioSegment.from_mp3(mp3_fname)
-            song = effects.normalize(song)
-            fname_tmp = fname + ".tmp"
-            if os.path.isfile(fname_tmp):
-                os.remove(fname_tmp)
-            song.export(fname_tmp, "wav")
-            os.remove(mp3_fname)
-            os.rename(fname_tmp, fname)
+            if not os.path.isfile(fname):
+                song = AudioSegment.from_mp3(mp3_fname)
+                song = effects.normalize(song)
+                fname_tmp = fname + ".tmp"
+                if os.path.isfile(fname_tmp):
+                    os.remove(fname_tmp)
+                song.export(fname_tmp, "wav")
+                os.remove(mp3_fname)
+                os.rename(fname_tmp, fname)
             convert_semaphore.release()
 
         return fname
