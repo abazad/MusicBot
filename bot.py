@@ -797,8 +797,7 @@ def start_gmusic_bot():
     dispatcher.add_handler(CommandHandler('login', login))
 
     dispatcher.add_handler(CommandHandler('subscribe', Notificator.subscribe))
-    dispatcher.add_handler(
-        CommandHandler('unsubscribe', Notificator.unsubscribe))
+    dispatcher.add_handler(CommandHandler('unsubscribe', Notificator.unsubscribe))
 
     # gmusic_password protected commands
     dispatcher.add_handler(CommandHandler('next', next_song))
@@ -817,8 +816,7 @@ def start_gmusic_bot():
     dispatcher.add_handler(CommandHandler('setpassword', set_password))
     dispatcher.add_handler(CommandHandler('banuser', ban_user))
     dispatcher.add_handler(CommandHandler('setquality', set_quality))
-    dispatcher.add_handler(
-        CommandHandler('stationremove', remove_from_playlist))
+    dispatcher.add_handler(CommandHandler('stationremove', remove_from_playlist))
 
     # Load additional Commands
     for plugin in plugin_loader.get_plugins():
