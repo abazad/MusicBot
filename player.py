@@ -309,6 +309,7 @@ class SongProvider(object):
         return self._next_songs[:count]
 
     def drop_next_songs(self):
+        self._playlist_entries = self._get_playlist_entries()
         self._next_songs.clear()
 
     def _create_playlist(self):
