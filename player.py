@@ -301,7 +301,9 @@ class SongProvider(object):
                                  'name': "Mickie Krause - Biste braun, kriegste Fraun",
                                  'artist': "Mickie Krause",
                                  'title': "Biste braun kriegste Fraun"}
-                self._next_songs.extend([fallback_song] * count)
+                # Only add the fallback song once to _next_songs but return a list of requested length
+                self._next_songs.extend([fallback_song])
+                return [fallback_song] * count
             else:
                 return self._next_songs
         return self._next_songs[:count]
