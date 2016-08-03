@@ -32,12 +32,23 @@ if not os.path.isdir(song_path):
 
 download_semaphore = threading.Semaphore(max_downloads)
 convert_semaphore = threading.Semaphore(max_conversions)
+loading_ids = set()
+loading_ids_lock = threading.Lock()
 
 config_file.close()
 
 
 def get_youtube_loader(video_id):
     def _youtube_loader():
+        loading_ids_lock.acquire()
+        if video_id in loading_ids:
+            loading_ids_lock.release()
+            time.sleep(2)
+            return _youtube_loader()
+        else:
+            loading_ids.add(video_id)
+            loading_ids_lock.release()
+
         url = "https://www.youtube.com/watch?v=" + video_id
 
         video = pafy.new(url)
@@ -69,12 +80,24 @@ def get_youtube_loader(video_id):
                 os.rename(fname_tmp, fname)
             convert_semaphore.release()
 
+        loading_ids_lock.acquire()
+        loading_ids.remove(video_id)
+        loading_ids_lock.release()
         return fname
     return _youtube_loader
 
 
 def get_gmusic_loader(api, store_id):
     def _gmusic_loader():
+        loading_ids_lock.acquire()
+        if store_id in loading_ids:
+            loading_ids_lock.release()
+            time.sleep(2)
+            return _gmusic_loader()
+        else:
+            loading_ids.add(store_id)
+            loading_ids_lock.release()
+
         mp3_fname = song_path + store_id + '.mp3'
         fname = song_path + store_id + ".wav"
 
@@ -124,14 +147,27 @@ def get_gmusic_loader(api, store_id):
                 os.rename(fname_tmp, fname)
             convert_semaphore.release()
 
+        loading_ids_lock.acquire()
+        loading_ids.remove(store_id)
+        loading_ids_lock.release()
         return fname
     return _gmusic_loader
 
 
 def get_soundcloud_loader(client, track):
     def _soundcloud_loader():
-        url = client.get(track.stream_url, allow_redirects=False).location
         track_id = str(track.id)
+
+        loading_ids_lock.acquire()
+        if track_id in loading_ids:
+            loading_ids_lock.release()
+            time.sleep(2)
+            return _soundcloud_loader()
+        else:
+            loading_ids.add(track_id)
+            loading_ids_lock.release()
+
+        url = client.get(track.stream_url, allow_redirects=False).location
         mp3_fname = song_path + track_id + ".mp3"
         fname = song_path + track_id + ".wav"
 
@@ -166,6 +202,9 @@ def get_soundcloud_loader(client, track):
                 os.rename(fname_tmp, fname)
             convert_semaphore.release()
 
+        loading_ids_lock.acquire()
+        loading_ids.remove(track_id)
+        loading_ids_lock.release()
         return fname
     return _soundcloud_loader
 
