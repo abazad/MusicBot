@@ -85,7 +85,8 @@ def handle_message(bot, update):
     chat_id = update.message.chat_id
     if chat_id in keyboard_sent:
         action = keyboard_sent[chat_id]
-        action(bot, update)
+        if action(bot, update):
+            del keyboard_sent[chat_id]
 
 
 def user_tuple_from_user(user):
@@ -127,6 +128,18 @@ class Notificator(object):
         queue_add = lambda name: "Added to queue: " + name
         queue_remove = lambda name: "Removed from queue: " + name
 
+    class _Subscriber(object):
+
+        def __init__(self, chat_id, silent):
+            self.chat_id = chat_id
+            self.silent = silent
+
+        def __hash__(self):
+            return hash(self.chat_id)
+
+        def __eq__(self, other):
+            return self.chat_id == other.chat_id
+
     _subscribers = set()
     _bot = None
 
@@ -135,24 +148,40 @@ class Notificator(object):
         if not Notificator._bot:
             Notificator._bot = bot
         chat_id = update.message.chat_id
-        Notificator._subscribers.add(chat_id)
-        bot.send_message(chat_id=chat_id, text="Subscribed.")
+
+        def _action(bot, update):
+            text = update.message.text.lower()
+            if "y" in text:
+                silent = False
+            else:
+                silent = True
+
+            subscriber = Notificator._Subscriber(chat_id, silent)
+            Notificator._subscribers.add(subscriber)
+            hide_keyboard(bot, chat_id, "Subscribed.")
+            return True
+
+        keyboard_items = ["Yes", "No"]
+        send_keyboard(bot, chat_id, "Do you want to receive notifications?", keyboard_items, _action)
 
     @staticmethod
     def unsubscribe(bot, update):
         chat_id = update.message.chat_id
-        Notificator._subscribers.remove(chat_id)
+        subscriber = Notificator._Subscriber(chat_id, True)
+        Notificator._subscribers.remove(subscriber)
         bot.send_message(chat_id=chat_id, text="Unsubscribed.")
 
     @staticmethod
     def notify(cause):
         if Notificator._bot:
-            for chat_id in Notificator._subscribers:
-                Notificator._bot.send_message(chat_id=chat_id, text=cause)
+            for subscriber in Notificator._subscribers:
+                chat_id = subscriber.chat_id
+                silent = subscriber.silent
+                Notificator._bot.send_message(chat_id=chat_id, text=cause, disable_notification=silent)
 
     @staticmethod
     def is_subscriber(chat_id):
-        return chat_id in Notificator._subscribers
+        return Notificator._Subscriber(chat_id, True) in Notificator._subscribers
 
 
 song_names = pylru.lrucache(512)
@@ -201,10 +230,11 @@ def lookup_soundcloud_track(song_id):
 def admin_command(func):
     def _admin_func(bot, update):
         if admin_chat_id == update.message.chat_id:
-            func(bot, update)
+            return func(bot, update)
         else:
             bot.send_message(
                 chat_id=update.message.chat_id, text="This command is for admins only")
+            return None
     return _admin_func
 
 
@@ -214,14 +244,15 @@ def password_protected_command(func):
         if session_password == " ":
             bot.send_message(
                 chat_id=chat_id, text="Admin hasn't decided which password to use yet")
-            return
+            return None
 
         user = update.message.from_user
         if is_logged_in(user):
-            func(bot, update)
+            return func(bot, update)
         else:
             bot.send_message(
                 chat_id=chat_id, text="Please log in with /login [password]")
+            return None
 
     return _password_protected_func
 
@@ -230,12 +261,13 @@ def keyboard_answer_handler(func):
     def _handler(bot, update):
         text = update.message.text
         if ")" not in text:
-            return
+            return False
         c = text.split(")")[0]
         if str.isdecimal(c):
-            func(int(c))
+            return func(int(c))
         else:
             print("INVALID CHOICE:", c)
+            return False
     return _handler
 
 
@@ -334,15 +366,12 @@ def skip(bot, update):
                          text="No songs in queue", reply_to_message_id=update.message.message_id)
         return
 
-    if chat_id in keyboard_sent:
-        return
-
     @keyboard_answer_handler
     def _skip_action(queue_position):
         queue_position -= 1
         queued_player.skip_song(queue_position)
         hide_keyboard(bot, chat_id, get_queue_message())
-        del keyboard_sent[chat_id]
+        return True
 
     keyboard_items = get_queue_keyboard_items()
     send_keyboard(bot, chat_id, "What song?", keyboard_items, _skip_action)
@@ -360,9 +389,6 @@ def move_song(bot, update):
                          text="Not >1 songs in queue", reply_to_message_id=message.message_id)
         return
 
-    if chat_id in keyboard_sent:
-        return
-
     @keyboard_answer_handler
     def _first_action(source_position):
         source_position -= 1
@@ -375,14 +401,13 @@ def move_song(bot, update):
             target_position -= 1
             queue.insert(target_position, source)
             hide_keyboard(bot, chat_id, get_queue_message())
-            del keyboard_sent[chat_id]
+            return True
 
-        send_keyboard(
-            bot, chat_id,  "Before what song should it be?", keyboard_items, _second_action)
+        send_keyboard(bot, chat_id, "Before what song should it be?", keyboard_items, _second_action)
+        return False
 
     keyboard_items = get_queue_keyboard_items()
-    send_keyboard(
-        bot, chat_id, "What song do you want to move?", keyboard_items, _first_action)
+    send_keyboard(bot, chat_id, "What song do you want to move?", keyboard_items, _first_action)
 
 
 @password_protected_command
@@ -675,10 +700,6 @@ def set_password(bot, update):
 def ban_user(bot, update):
     chat_id = update.message.chat_id
     global session_clients
-    if chat_id in keyboard_sent:
-        bot.send_message(
-            chat_id=chat_id, text="Finish what you were doing first")
-        return
 
     if not session_password:
         bot.send_message(chat_id=chat_id, text="Password is disabled")
@@ -698,10 +719,10 @@ def ban_user(bot, update):
         ban_id = ban_id + 1
         session_clients = set(
             filter(lambda client: client[0] != ban_id, session_clients))
-        del keyboard_sent[chat_id]
         session_password = " "
         hide_keyboard(
             bot, chat_id, "Banned user. Please set a new password.")
+        return True
 
     send_keyboard(bot, chat_id, text, keyboard_items, _ban_action)
 
@@ -743,22 +764,20 @@ def remove_from_playlist(bot, update):
     def _action(bot, update):
         text = update.message.text
         if "|" not in text:
-            return
+            return False
 
         store_id = text.split("|")[1].strip()
         if store_id not in playlist:
-            bot.send_message(
-                chat_id=chat_id, text="That song is not in the BotPlaylist")
+            bot.send_message(chat_id=chat_id, text="That song is not in the BotPlaylist")
 
         queued_player.remove_from_remote_playlist(store_id)
-        hide_keyboard(
-            bot, chat_id, "Removed from playlist: " + lookup_gmusic_song_name(store_id))
+        hide_keyboard(bot, chat_id, "Removed from playlist: " + lookup_gmusic_song_name(store_id))
+        return True
 
     keyboard_items = list(map(lambda song: "{} | {}".format(song[0], song[1]), sorted(
         map(lambda store_id: (lookup_gmusic_song_name(store_id), store_id), playlist), key=lambda item: item[0])))
 
-    send_keyboard(bot, chat_id,
-                  "What song should be removed?", keyboard_items, _action)
+    send_keyboard(bot, chat_id, "What song should be removed?", keyboard_items, _action)
 
 
 # Onetime bot startup methods
