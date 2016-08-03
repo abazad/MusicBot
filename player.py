@@ -308,6 +308,9 @@ class SongProvider(object):
                 return self._next_songs
         return self._next_songs[:count]
 
+    def drop_next_songs(self):
+        self._next_songs.clear()
+
     def _create_playlist(self):
         if not self._playlist_id:
             playlist_name = self._add_identifier_to_playlist_name(
@@ -496,6 +499,9 @@ class Player(object):
 
     def get_song_suggestions(self, count=20):
         return self._queue.song_provider.get_suggestions(count)
+
+    def drop_station_songs(self):
+        self._queue.song_provider.drop_next_songs()
 
     def _on_song_end(self):
         if not self._lock.acquire(blocking=False):

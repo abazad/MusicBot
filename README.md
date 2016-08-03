@@ -48,6 +48,8 @@ This bot lets users select songs from Google Play Music to play on the bot host 
 * /setpassword [password] - sets the session password
 * /banuser - bans a user from the current session and resets the password
 * /setquality [hi/med/low] - sets the gmusic song quality
+* /stationremove - remove a song from the BotPlaylist
+* /stationreload - reload the pre-fetched next songs list from the BotStation
 
 ## Dependencies:
   - [colorama](https://github.com/tartley/colorama)

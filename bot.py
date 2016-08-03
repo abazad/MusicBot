@@ -780,6 +780,13 @@ def remove_from_playlist(bot, update):
     send_keyboard(bot, chat_id, "What song should be removed?", keyboard_items, _action)
 
 
+@admin_command
+def reload_station_songs(bot, update):
+    # Drop the pre-fetched next_songs list. The list will be refilled when needed.
+    queued_player.drop_station_songs()
+    bot.send_message(chat_id=update.message.chat_id, text="Reloaded station songs.")
+
+
 # Onetime bot startup methods
 
 def start_gmusic_bot():
@@ -817,6 +824,7 @@ def start_gmusic_bot():
     dispatcher.add_handler(CommandHandler('banuser', ban_user))
     dispatcher.add_handler(CommandHandler('setquality', set_quality))
     dispatcher.add_handler(CommandHandler('stationremove', remove_from_playlist))
+    dispatcher.add_handler(CommandHandler('stationreload', reload_station_songs))
 
     # Load additional Commands
     for plugin in plugin_loader.get_plugins():
