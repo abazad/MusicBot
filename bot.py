@@ -127,6 +127,18 @@ class Notificator(object):
         queue_add = lambda name: "Added to queue: " + name
         queue_remove = lambda name: "Removed from queue: " + name
 
+    class _Subscriber(object):
+
+        def __init__(self, chat_id, silent):
+            self.chat_id = chat_id
+            self.silent = silent
+
+        def __hash__(self):
+            return hash(self.chat_id)
+
+        def __eq__(self, other):
+            return self.chat_id == other.chat_id
+
     _subscribers = set()
     _bot = None
 
@@ -135,24 +147,40 @@ class Notificator(object):
         if not Notificator._bot:
             Notificator._bot = bot
         chat_id = update.message.chat_id
-        Notificator._subscribers.add(chat_id)
-        bot.send_message(chat_id=chat_id, text="Subscribed.")
+
+        def _action(bot, update):
+            text = update.message.text.lower()
+            if "y" in text:
+                silent = False
+            else:
+                silent = True
+
+            subscriber = Notificator._Subscriber(chat_id, silent)
+            Notificator._subscribers.add(subscriber)
+            hide_keyboard(bot, chat_id, "Subscribed.")
+            del keyboard_sent[chat_id]
+
+        keyboard_items = ["Yes", "No"]
+        send_keyboard(bot, chat_id, "Do you want to receive notifications?", keyboard_items, _action)
 
     @staticmethod
     def unsubscribe(bot, update):
         chat_id = update.message.chat_id
-        Notificator._subscribers.remove(chat_id)
+        subscriber = Notificator._Subscriber(chat_id, True)
+        Notificator._subscribers.remove(subscriber)
         bot.send_message(chat_id=chat_id, text="Unsubscribed.")
 
     @staticmethod
     def notify(cause):
         if Notificator._bot:
-            for chat_id in Notificator._subscribers:
-                Notificator._bot.send_message(chat_id=chat_id, text=cause)
+            for subscriber in Notificator._subscribers:
+                chat_id = subscriber.chat_id
+                silent = subscriber.silent
+                Notificator._bot.send_message(chat_id=chat_id, text=cause, disable_notification=silent)
 
     @staticmethod
     def is_subscriber(chat_id):
-        return chat_id in Notificator._subscribers
+        return Notificator._Subscriber(chat_id, True) in Notificator._subscribers
 
 
 song_names = pylru.lrucache(512)
