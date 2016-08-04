@@ -907,7 +907,7 @@ with open(secrets_path, "r") as secrets_file:
     try:
         gmusic_user = content["gmusic_username"]
         gmusic_password = content["gmusic_password"]
-        gmusic_device_id = content["gmusic_device_id"]
+        gmusic_device_id = content.get("gmusic_device_id", None)
         gmusic_token = content["gmusic_bot_token"]
     except KeyError:
         print("Missing GMusic secrets")
@@ -939,9 +939,24 @@ if load_plugins:
     plugin_loader.load_plugins()
 
 api = Mobileclient(debug_logging=False)
+
+missing_device_id = not gmusic_device_id
+if missing_device_id or gmusic_device_id.upper() == "MAC":
+    gmusic_device_id = Mobileclient.FROM_MAC_ADDRESS
+else:
+    if gmusic_device_id.startswith("0x"):
+        gmusic_device_id = gmusic_device_id[2:]
+
 if not api.login(gmusic_user, gmusic_password, gmusic_device_id, gmusic_locale):
     print("Failed to log in to gmusic")
     sys.exit(1)
+
+if missing_device_id:
+    devices = api.get_registered_devices()
+    api.logout()
+    print("No device ID provided, printing registered devices:")
+    print(json.dumps(devices, indent=4, sort_keys=True))
+    sys.exit(4)
 
 if youtube_token and youtube_api_key:
     import pafy
