@@ -94,7 +94,7 @@ def user_tuple_from_user(user):
 
 
 def is_logged_in(user):
-    return not session_password or user_tuple_from_user(user) in session_clients
+    return (not enable_session_password) or (user_tuple_from_user(user) in session_clients)
 
 
 def get_current_song_message():
@@ -241,17 +241,15 @@ def admin_command(func):
 def password_protected_command(func):
     def _password_protected_func(bot, update):
         chat_id = update.message.chat_id
-        if session_password == " ":
-            bot.send_message(
-                chat_id=chat_id, text="Admin hasn't decided which password to use yet")
+        if enable_session_password and not session_password:
+            bot.send_message(chat_id=chat_id, text="Admin hasn't decided which password to use yet")
             return None
 
         user = update.message.from_user
         if is_logged_in(user):
             return func(bot, update)
         else:
-            bot.send_message(
-                chat_id=chat_id, text="Please log in with /login [password]")
+            bot.send_message(chat_id=chat_id, text="Please log in with /login [password]")
             return None
 
     return _password_protected_func
@@ -297,7 +295,7 @@ session_clients = set()
 def login(bot, update):
     chat_id = update.message.chat_id
     user = update.message.from_user
-    if not session_password:
+    if not enable_session_password:
         bot.send_message(chat_id=chat_id, text="There is no password")
         return
 
@@ -307,15 +305,13 @@ def login(bot, update):
         bot.send_message(chat_id=chat_id, text="You are already logged in")
         return
 
-    if session_password == " ":
-        bot.send_message(
-            chat_id=chat_id, text="Admin hasn't decided which password to use yet")
+    if not session_password:
+        bot.send_message(chat_id=chat_id, text="Admin hasn't decided which password to use yet")
         return
 
     split = update.message.text.split(" ")
     if len(split) < 2:
-        bot.send_message(
-            chat_id=chat_id, text="Usage: /login [password]")
+        bot.send_message(chat_id=chat_id, text="Usage: /login [password]")
         return
 
     password = split[1].strip()
@@ -657,31 +653,28 @@ def send_ip(bot, update):
 
 @admin_command
 def toggle_password(bot, update):
-    global session_password
+    global enable_session_password
     chat_id = update.message.chat_id
-    if session_password:
-        session_password = None
+    if enable_session_password:
+        enable_session_password = False
         session_clients.clear()
         bot.send_message(chat_id=chat_id, text="Password disabled")
     else:
-        session_password = " "
-        bot.send_message(
-            chat_id=chat_id, text="Password is now enabled. Set a password with /setpassword [password]")
+        enable_session_password = True
+        bot.send_message(chat_id=chat_id, text="Password is now enabled. Set a password with /setpassword [password]")
 
 
 @admin_command
 def set_password(bot, update):
     global session_password
     chat_id = update.message.chat_id
-    if not session_password:
-        bot.send_message(
-            chat_id=chat_id, text="Please enable password protection with /togglepassword first")
+    if not enable_session_password:
+        bot.send_message(chat_id=chat_id, text="Please enable password protection with /togglepassword first")
         return
 
     split = update.message.text.split(" ")
     if len(split) < 2:
-        bot.send_message(
-            chat_id=chat_id, text="Usage: /setpassword [password]")
+        bot.send_message(chat_id=chat_id, text="Usage: /setpassword [password]")
         return
 
     password = split[1].strip()
@@ -701,7 +694,7 @@ def ban_user(bot, update):
     chat_id = update.message.chat_id
     global session_clients
 
-    if not session_password:
+    if not enable_session_password:
         bot.send_message(chat_id=chat_id, text="Password is disabled")
         return
 
@@ -717,11 +710,9 @@ def ban_user(bot, update):
         global session_clients
         global session_password
         ban_id = ban_id + 1
-        session_clients = set(
-            filter(lambda client: client[0] != ban_id, session_clients))
-        session_password = " "
-        hide_keyboard(
-            bot, chat_id, "Banned user. Please set a new password.")
+        session_clients = set(filter(lambda client: client[0] != ban_id, session_clients))
+        session_password = None
+        hide_keyboard(bot, chat_id, "Banned user. Please set a new password.")
         return True
 
     send_keyboard(bot, chat_id, text, keyboard_items, _ban_action)
@@ -897,6 +888,7 @@ with open("config.json", "r") as config_file:
     secrets_path = path.join(secrets_location, "secrets.json")
     enable_updates = config.get("auto_updates", 0)
     enable_suggestions = config.get("suggest_songs", 0)
+    enable_session_password = config.get("enable_session_password", 1)
     load_plugins = config.get("load_plugins", 1)
     del config
 
@@ -930,8 +922,6 @@ else:
 
 
 session_password = None
-if admin_chat_id:
-    session_password = " "
 
 
 plugin_loader = PluginLoader()
