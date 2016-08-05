@@ -1,0 +1,9 @@
+python-telegram-bot
+gmusicapi
+youtube-dl
+pafy
+pydub
+simpleaudio
+pylru
+soundcloud
+colorama
