@@ -1,399 +1,26 @@
-import json
-import os
-import re
-import socket
-import sys
 import threading
 import time
-import urllib
-
-from gmusicapi.exceptions import CallFailure
-import pafy
-from pydub import AudioSegment, effects
-
-
-config_file = open("config.json", "r")
-config = json.loads(config_file.read())
-
-max_downloads = max(config['max_downloads'], 1)
-max_conversions = max(config['max_conversions'], 1)
-quality = config['quality']
-song_path = config['song_path']
-
-if not re.compile(r'[ \S]+(\\|\/)$').match(song_path):
-    song_path += "/"
-
-if not os.path.isdir(song_path):
-    try:
-        os.makedirs(song_path)
-    except OSError:
-        print("'{}' is not a valid directory path. Exiting.".format(song_path))
-        sys.exit(3)
-
-download_semaphore = threading.Semaphore(max_downloads)
-convert_semaphore = threading.Semaphore(max_conversions)
-loading_ids = set()
-loading_ids_lock = threading.Lock()
-
-config_file.close()
-
-
-def get_youtube_loader(video_id):
-    def _youtube_loader():
-        loading_ids_lock.acquire()
-        if video_id in loading_ids:
-            loading_ids_lock.release()
-            time.sleep(2)
-            return _youtube_loader()
-        else:
-            loading_ids.add(video_id)
-            loading_ids_lock.release()
-
-        url = "https://www.youtube.com/watch?v=" + video_id
-
-        video = pafy.new(url)
-        audio = video.getbestaudio()
-
-        video_fname = song_path + video.videoid + "." + audio.extension
-        fname = song_path + video.videoid + ".wav"
-
-        if not os.path.isfile(fname):
-            if not os.path.isfile(video_fname):
-                download_semaphore.acquire()
-                if not os.path.isfile(video_fname):
-                    video_fname_tmp = video_fname + ".tmp"
-                    if os.path.isfile(video_fname_tmp):
-                        os.remove(video_fname_tmp)
-                    audio.download(filepath=video_fname_tmp, quiet=True)
-                    os.rename(video_fname_tmp, video_fname)
-                download_semaphore.release()
-
-            convert_semaphore.acquire()
-            if not os.path.isfile(fname):
-                song = AudioSegment.from_file(video_fname, audio.extension)
-                song = effects.normalize(song)
-                fname_tmp = fname + ".tmp"
-                if os.path.isfile(fname_tmp):
-                    os.remove(fname_tmp)
-                song.export(fname_tmp, "wav")
-                os.remove(video_fname)
-                os.rename(fname_tmp, fname)
-            convert_semaphore.release()
-
-        loading_ids_lock.acquire()
-        loading_ids.remove(video_id)
-        loading_ids_lock.release()
-        return fname
-    return _youtube_loader
-
-
-def get_gmusic_loader(api, store_id):
-    def _gmusic_loader():
-        loading_ids_lock.acquire()
-        if store_id in loading_ids:
-            loading_ids_lock.release()
-            time.sleep(2)
-            return _gmusic_loader()
-        else:
-            loading_ids.add(store_id)
-            loading_ids_lock.release()
-
-        mp3_fname = song_path + store_id + '.mp3'
-        fname = song_path + store_id + ".wav"
-
-        if not os.path.isfile(fname):
-            if not os.path.isfile(mp3_fname):
-                download_semaphore.acquire()
-                if not os.path.isfile(mp3_fname):
-                    attempts = 3
-                    url = None
-                    while attempts and not url:
-                        try:
-                            url = api.get_stream_url(store_id, quality=quality)
-                        except CallFailure as e:
-                            # Sometimes, the call returns a 403
-                            attempts -= 1
-                            print(
-                                "403, retrying... ({} attempts left)".format(attempts))
-                            if not attempts:
-                                print(e)
-
-                    if not attempts:
-                        return None  # TODO do something else here
-
-                    request = urllib.request.Request(url)
-                    page = urllib.request.urlopen(request)
-
-                    mp3_fname_tmp = mp3_fname + ".tmp"
-                    if os.path.isfile(mp3_fname_tmp):
-                        os.remove(mp3_fname_tmp)
-
-                    file = open(mp3_fname_tmp, "wb")
-                    file.write(page.read())
-                    file.close()
-                    page.close()
-                    os.rename(mp3_fname_tmp, mp3_fname)
-                download_semaphore.release()
-
-            convert_semaphore.acquire()
-            if not os.path.isfile(fname):
-                song = AudioSegment.from_mp3(mp3_fname)
-                song = effects.normalize(song)
-                fname_tmp = fname + ".tmp"
-                if os.path.isfile(fname_tmp):
-                    os.remove(fname_tmp)
-                song.export(fname_tmp, "wav")
-                os.remove(mp3_fname)
-                os.rename(fname_tmp, fname)
-            convert_semaphore.release()
-
-        loading_ids_lock.acquire()
-        loading_ids.remove(store_id)
-        loading_ids_lock.release()
-        return fname
-    return _gmusic_loader
-
-
-def get_soundcloud_loader(client, track):
-    def _soundcloud_loader():
-        track_id = str(track.id)
-
-        loading_ids_lock.acquire()
-        if track_id in loading_ids:
-            loading_ids_lock.release()
-            time.sleep(2)
-            return _soundcloud_loader()
-        else:
-            loading_ids.add(track_id)
-            loading_ids_lock.release()
-
-        url = client.get(track.stream_url, allow_redirects=False).location
-        mp3_fname = song_path + track_id + ".mp3"
-        fname = song_path + track_id + ".wav"
-
-        if not os.path.isfile(fname):
-            if not os.path.isfile(mp3_fname):
-                download_semaphore.acquire()
-                if not os.path.isfile(mp3_fname):
-                    mp3_fname_tmp = mp3_fname + ".tmp"
-                    if os.path.isfile(mp3_fname_tmp):
-                        os.remove(mp3_fname_tmp)
-
-                    request = urllib.request.Request(url)
-                    page = urllib.request.urlopen(request)
-
-                    file = open(mp3_fname_tmp, "wb")
-                    file.write(page.read())
-                    file.close()
-                    page.close()
-
-                    os.rename(mp3_fname_tmp, mp3_fname)
-                download_semaphore.release()
-
-            convert_semaphore.acquire()
-            if not os.path.isfile(fname):
-                song = AudioSegment.from_mp3(mp3_fname)
-                song = effects.normalize(song)
-                fname_tmp = fname + ".tmp"
-                if os.path.isfile(fname_tmp):
-                    os.remove(fname_tmp)
-                song.export(fname_tmp, "wav")
-                os.remove(mp3_fname)
-                os.rename(fname_tmp, fname)
-            convert_semaphore.release()
-
-        loading_ids_lock.acquire()
-        loading_ids.remove(track_id)
-        loading_ids_lock.release()
-        return fname
-    return _soundcloud_loader
-
-
-class SongProvider(object):
-
-    def __init__(self, api):
-        self._api = api
-        self._playlist_id = None
-        self._playlist_token = None
-        self._station_id = None
-        self._last_played_ids = []
-        self._next_songs = []
-        self._try_restore_ids()
-        self._playlist_entries = self._get_playlist_entries()
-
-    def get_song(self):
-        self._create_playlist()
-        if not self._station_id:
-            self._create_station()
-        song = self.get_suggestions(1)[0]
-        self._next_songs.pop(0)
-        store_id = song['store_id']
-        self._last_played_ids.append(store_id)
-        return song
-
-    def add_played(self, song):
-        self._create_playlist()
-        store_id = song['store_id']
-
-        if store_id not in self._playlist_entries:
-            self._api.add_songs_to_playlist(self._playlist_id, store_id)
-            self._playlist_entries.add(store_id)
-
-        self._last_played_ids.append(store_id)
-        self._next_songs = list(
-            filter(lambda song: song['store_id'] != store_id, self._next_songs))
-        if len(self._last_played_ids) > 50:
-            self._last_played_ids = self._last_played_ids[-50::]
-
-    def get_playlist_content(self):
-        return self._playlist_entries
-
-    def remove_from_playlist(self, store_id):
-        if store_id in self._playlist_entries:
-            playlist_contents = self._api.get_all_user_playlist_contents()
-
-            tracks = None
-            for playlist in playlist_contents:
-                if playlist['id'] == self._playlist_id:
-                    tracks = playlist['tracks']
-                    break
-
-            if not tracks:
-                return
-
-            track = list(filter(lambda t: t['trackId'] == store_id, tracks))
-            if not track:
-                return
-
-            track = dict(track[0])
-            entry_id = track['id']
-
-            self._api.remove_entries_from_playlist(entry_id)
-            self._playlist_entries.remove(store_id)
-
-    def get_suggestions(self, count):
-        def _song_from_api_song(song):
-            if "storeId" in song:
-                store_id = song['storeId']
-            elif "id" in song:
-                store_id = song['id']
-            else:
-                return None
-
-            name = "{} - {}".format(song["artist"], song["title"])
-            song['store_id'] = store_id
-            song['load_song'] = get_gmusic_loader(self._api, store_id)
-            song['name'] = name
-
-            return song
-
-        while len(self._next_songs) < count:
-            api_songs = self._api.get_station_tracks(
-                self._station_id, recently_played_ids=self._last_played_ids, num_tracks=max(25, count - len(self._next_songs)))
-            if api_songs:
-                self._next_songs.extend(
-                    filter(lambda s: s, map(_song_from_api_song, api_songs)))
-            elif not self._next_songs:
-                # Fallback song
-                store_id = "Tj6fhurtstzgdpvfm4xv6i5cei4"
-                fallback_song = {'store_id': store_id,
-                                 'load_song': get_gmusic_loader(self._api, store_id),
-                                 'name': "Mickie Krause - Biste braun, kriegste Fraun",
-                                 'artist': "Mickie Krause",
-                                 'title': "Biste braun kriegste Fraun"}
-                # Only add the fallback song once to _next_songs but return a list of requested length
-                self._next_songs.extend([fallback_song])
-                return [fallback_song] * count
-            else:
-                return self._next_songs
-        return self._next_songs[:count]
-
-    def drop_next_songs(self):
-        self._playlist_entries = self._get_playlist_entries()
-        self._next_songs.clear()
-
-    def _create_playlist(self):
-        if not self._playlist_id:
-            playlist_name = self._add_identifier_to_playlist_name(
-                "BotPlaylist created on {} at {}")
-            self._playlist_id = self._api.create_playlist(playlist_name)
-            self._write_ids()
-            playlist = list(filter(
-                lambda p: p['id'] == self._playlist_id, self._api.get_all_playlists()))[0]
-            self._playlist_token = playlist['shareToken']
-
-    def _get_playlist_entries(self):
-        self._create_playlist()
-        playlist_contents = self._api.get_all_user_playlist_contents()
-
-        result = set()
-
-        tracks = None
-        for playlist in playlist_contents:
-            if playlist['id'] == self._playlist_id:
-                tracks = playlist['tracks']
-
-        if not tracks:
-            return result
-
-        for track in tracks:
-            result.add(track['track']['storeId'])
-        return result
-
-    def _add_identifier_to_playlist_name(self, playlist_name):
-        hostname = socket.gethostname()
-        timestamp = time.strftime("%c")
-        return playlist_name.format(hostname, timestamp)
-
-    def _create_station(self):
-        if not self._station_id:
-            station_name = self._add_identifier_to_playlist_name(
-                "BotStation created on {} at {}")
-            self._station_id = self._api.create_station(
-                station_name, playlist_token=self._playlist_token)
-            self._write_ids()
-
-    def _write_ids(self):
-        ids = {'playlist_token': self._playlist_token,
-               'playlist_id': self._playlist_id, 'station_id': self._station_id}
-        id_file = open("ids.json", "w")
-        id_file.write(json.dumps(ids, indent=4, sort_keys=True))
-        id_file.close()
-
-    def _try_restore_ids(self):
-        if os.path.isfile("ids.json"):
-            id_file = open("ids.json", "r")
-            ids = json.loads(id_file.read())
-            id_file.close()
-            self._playlist_id = ids['playlist_id']
-            self._playlist_token = ids['playlist_token']
-            self._station_id = ids['station_id']
-
-    def reset(self):
-        os.remove("ids.json")
-        api = self._api
-        api.delete_stations([self._station_id])
-        api.delete_playlist(self._playlist_id)
 
 
 class SongQueue(list):
 
     def __init__(self, song_provider, notificator):
         super().__init__()
-        self.song_provider = song_provider
-        self._next_random = None
-        self._prepare_next()
-        self._pop_lock = threading.Lock()
+        self._stop_preparing = False
+        self._prepare_event = threading.Event()
+        self._song_provider = song_provider
         self._append_lock = threading.Lock()
         self._notificator = notificator
+        threading.Thread(name="prepareThread", target=self._prepare_next).start()
 
     def _prepare_next(self):
-        print("PREPARING")
-        next_song = self.song_provider.get_song()
-        fname = next_song['load_song']()
-        next_song['load_song'] = lambda: fname
-        self._next_random = next_song
-        print("FINISHED PREPARING")
+        while not self._stop_preparing:
+            print("PREPARING")
+            next_song = self._song_provider.get_suggestions(1)[0]
+            next_song.load()
+            print("FINISHED PREPARING")
+            self._prepare_event.wait()
+            self._prepare_event.clear()
 
     def pop(self, *args, **kwargs):
         result = None
@@ -401,60 +28,42 @@ class SongQueue(list):
         try:
             result = list.pop(self, *args, **kwargs)
             # All gmusic store ids start with T and are 27 chars long
-            store_id = result['store_id']
-            if store_id.startswith("T") and len(store_id) == 27:
-                self.song_provider.add_played(result)
+            song_id = result.song_id
+            if song_id.startswith("T") and len(song_id) == 27:
+                self._song_provider.add_played(result)
         except IndexError:
-            if self._pop_lock.acquire(blocking=False):
-                while self._next_random is None:
-                    time.sleep(0.2)
-                result = self._next_random
-                self._next_random = None
-                threading.Thread(
-                    target=self._prepare_next, name="prepare_thread").start()
-                self._pop_lock.release()
-
+            try:
+                result = self._song_provider.get_song()
+                self._prepare_event.set()
+            except Exception as e:
+                print(e)
         return result
 
-    def append(self, *args, **kwargs):
-        song = args[0]
-
+    def append(self, song):
         def _append():
             print("LOADING APPENDED SONG")
-            fname = song['load_song']()
-            song['load_song'] = lambda: fname
+            song.load()
             self._append_lock.acquire()
-            duplicate = False
-            for queue_song in self:
-                if song['store_id'] == queue_song['store_id']:
-                    duplicate = True
-                    break
-
-            if not duplicate:
-                list.append(self, *args, **kwargs)
+            if song not in self:
+                list.append(self, song)
             self._append_lock.release()
             print("FINISHED LOADING APPENDED SONG")
             NotificationCause = self._notificator.NotificationCause
-            self._notificator.notify(NotificationCause.queue_add(song['name']))
+            self._notificator.notify(NotificationCause.queue_add(song))
 
         threading.Thread(target=_append, name="append_thread").start()
-
-    def reset(self):
-        self.song_provider.reset()
 
 
 class Player(object):
 
-    def __init__(self, api, notificator, song_provider=None):
+    def __init__(self, api, notificator):
         import simpleaudio
         self._sa = simpleaudio
         self._player = None
         self._stop = False
         self._pause = False
         self._api = api
-        if not song_provider:
-            song_provider = SongProvider(api)
-        self._queue = SongQueue(song_provider, notificator)
+        self._queue = SongQueue(api, notificator)
         self._current_song = None
         self._lock = threading.Lock()
         self._barrier = threading.Barrier(2)
@@ -469,7 +78,7 @@ class Player(object):
     def skip_song(self, queue_position):
         song = self._queue.pop(queue_position)
         NotificationCause = self._notificator.NotificationCause
-        self._notificator.notify(NotificationCause.queue_remove(song['name']))
+        self._notificator.notify(NotificationCause.queue_remove(song))
 
     def pause(self):
         self._pause = True
@@ -482,27 +91,11 @@ class Player(object):
     def next(self):
         self._on_song_end()
 
-    def reset(self):
-        self._queue.reset()
-        self._player.stop()
-
     def get_current_song(self):
         return self._current_song
 
     def clear_queue(self):
         self._queue.clear()
-
-    def get_remote_playlist(self):
-        return self._queue.song_provider.get_playlist_content()
-
-    def remove_from_remote_playlist(self, store_id):
-        self._queue.song_provider.remove_from_playlist(store_id)
-
-    def get_song_suggestions(self, count=20):
-        return self._queue.song_provider.get_suggestions(count)
-
-    def drop_station_songs(self):
-        self._queue.song_provider.drop_next_songs()
 
     def _on_song_end(self):
         if not self._lock.acquire(blocking=False):
@@ -512,7 +105,7 @@ class Player(object):
         song = self._queue.pop(0)
         if not song or self._stop:
             return
-        fname = song['load_song']()
+        fname = song.load()
 
         wave_obj = self._sa.WaveObject.from_wave_file(fname)
         if self._player:

@@ -1,12 +1,12 @@
 {
-    "gmusic_locale": 0,
     "auto_updates": 0,
+    "enable_session_password": false,
+    "gmusic_locale": 0,
     "load_plugins": 1,
-    "enable_session_password": 1,
-    "max_downloads" : 1,
     "max_conversions": 1,
+    "max_downloads": 1,
     "quality": "med",
-    "secrets_location": "",
+    "secrets_location": "config",
     "song_path": "songs",
     "suggest_songs": 1
 }

@@ -1,20 +1,15 @@
 from concurrent.futures.thread import ThreadPoolExecutor
 from enum import Enum
 import json
-import locale
 import multiprocessing
-from os import path
 import os
-from signal import SIGTERM
+import signal
 import socket
 import sys
 import threading
-from time import sleep
+import time
 
 import colorama
-from gmusicapi.clients.mobileclient import Mobileclient
-from gmusicapi.exceptions import CallFailure
-import pylru
 from telegram import InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import InlineQueryHandler, ChosenInlineResultHandler
 from telegram.ext.commandhandler import CommandHandler
@@ -23,10 +18,14 @@ from telegram.ext.updater import Updater
 from telegram.replykeyboardhide import ReplyKeyboardHide
 from telegram.replykeyboardmarkup import ReplyKeyboardMarkup
 
-from player import Player
-import player
-from plugin_handler import PluginLoader
+from telegrammusicbot import player, music_apis
+from telegrammusicbot.plugin_handler import PluginLoader
 
+try:
+    os.chdir("..")
+except:
+    print("Could not change dir")
+    sys.exit(100)
 
 # Initialize colorama for colored output
 colorama.init()
@@ -34,7 +33,7 @@ colorama.init()
 
 # Utility methods
 
-def save_config(file="config.json", *args):
+def save_config(file="config/config.json", *args):
     config_file = open(file, 'r')
     config = json.loads(config_file.read())
     config_file.close()
@@ -52,11 +51,9 @@ def send_keyboard(bot, chat_id, text, items, action=None):
     for item in items:
         keyboard.append([item])
 
-    markup = ReplyKeyboardMarkup(
-        keyboard, one_time_keyboard=True, resize_keyboard=True)
+    markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
 
-    bot.send_message(chat_id=chat_id, text=text,
-                     reply_markup=markup)
+    bot.send_message(chat_id=chat_id, text=text, reply_markup=markup)
 
     if action:
         keyboard_sent[chat_id] = action
@@ -64,8 +61,7 @@ def send_keyboard(bot, chat_id, text, items, action=None):
 
 def hide_keyboard(bot, chat_id, message):
     markup = ReplyKeyboardHide()
-    bot.send_message(
-        chat_id=chat_id, text=message, reply_markup=markup, parse_mode="markdown")
+    bot.send_message(chat_id=chat_id, text=message, reply_markup=markup, parse_mode="markdown")
 
 
 def cancel_keyboard(bot, update):
@@ -90,7 +86,7 @@ def handle_message(bot, update):
 
 
 def user_tuple_from_user(user):
-    return (user.id,  user.first_name)
+    return (user.id, user.first_name)
 
 
 def is_logged_in(user):
@@ -98,7 +94,7 @@ def is_logged_in(user):
 
 
 def get_current_song_message():
-    return "Now playing: {}".format(queued_player.get_current_song()['name'])
+    return "Now playing: {}".format(queued_player.get_current_song())
 
 
 def get_queue_message():
@@ -106,8 +102,7 @@ def get_queue_message():
     message = "\n"
     header_str = "*Current queue:*"
     if len(queue) > 0:
-        message = header_str + "\n" + \
-            message.join(map(lambda song: song['name'], queue))
+        message = header_str + "\n" + message.join(map(str, queue))
     else:
         message = message.join([header_str, "_empty..._"])
     return message
@@ -117,7 +112,7 @@ def get_queue_keyboard_items():
     keyboard_items = []
     queue = queued_player.get_queue()
     for i in range(0, len(queue)):
-        keyboard_items.append("{}) {}".format(i + 1, queue[i]['name']))
+        keyboard_items.append("{}) {}".format(i + 1, queue[i]))
     return keyboard_items
 
 
@@ -125,8 +120,8 @@ class Notificator(object):
 
     class NotificationCause(Enum):
         next_song = get_current_song_message
-        queue_add = lambda name: "Added to queue: " + name
-        queue_remove = lambda name: "Removed from queue: " + name
+        queue_add = lambda song: "Added to queue: " + str(song)
+        queue_remove = lambda song: "Removed from queue: " + str(song)
 
     class _Subscriber(object):
 
@@ -184,47 +179,6 @@ class Notificator(object):
         return Notificator._Subscriber(chat_id, True) in Notificator._subscribers
 
 
-song_names = pylru.lrucache(512)
-
-
-def lookup_gmusic_song_name(store_id):
-    if not store_id:
-        return "Nothing"
-    elif store_id in song_names:
-        return song_names[store_id]
-    else:
-        try:
-            info = api.get_track_info(store_id)
-        except CallFailure:
-            return store_id
-        title = "{} - {}".format(info["artist"], info["title"])
-        song_names[store_id] = title
-        return title
-
-
-def lookup_youtube_song_name(video_id):
-    if not video_id:
-        return "Nothing"
-    elif video_id in song_names:
-        return song_names[video_id]
-    else:
-        url = "https://www.youtube.com/watch?v=" + video_id
-        video = pafy.new(url)
-        title = video.title
-        song_names[video_id] = title
-        return title
-
-
-def lookup_soundcloud_track(song_id):
-    if not song_id:
-        return "Nothing"
-    elif song_id in song_names:
-        return song_names[song_id]
-    else:
-        track = soundcloud_client.get("/tracks/{}".format(song_id))
-        return track
-
-
 # Decorators
 
 def admin_command(func):
@@ -232,8 +186,7 @@ def admin_command(func):
         if admin_chat_id == update.message.chat_id:
             return func(bot, update)
         else:
-            bot.send_message(
-                chat_id=update.message.chat_id, text="This command is for admins only")
+            bot.send_message(chat_id=update.message.chat_id, text="This command is for admins only")
             return None
     return _admin_func
 
@@ -282,11 +235,9 @@ def multithreaded_command(func):
 
 def start(bot, update):
     if not is_logged_in(update.message.from_user):
-        bot.send_message(
-            chat_id=update.message.chat_id, text="Please log in with /login [password]")
+        bot.send_message(chat_id=update.message.chat_id, text="Please log in with /login [password]")
         return
-    bot.send_message(
-        text="Type @gmusicqueuebot and search for a song", chat_id=update.message.chat_id)
+    bot.send_message(text="Type @gmusicqueuebot and search for a song", chat_id=update.message.chat_id)
 
 
 session_clients = set()
@@ -328,13 +279,11 @@ def login(bot, update):
 
 def answer_queue(bot, update):
     message = get_queue_message()
-    bot.send_message(
-        chat_id=update.message.chat_id, text=message, parse_mode="markdown")
+    bot.send_message(chat_id=update.message.chat_id, text=message, parse_mode="markdown")
 
 
 def answer_current_song(bot, update):
-    bot.send_message(
-        chat_id=update.message.chat_id, text=get_current_song_message())
+    bot.send_message(chat_id=update.message.chat_id, text=get_current_song_message())
 
 
 def set_admin(bot, update):
@@ -342,7 +291,7 @@ def set_admin(bot, update):
     chat_id = update.message.chat_id
     if not admin_chat_id:
         admin_chat_id = chat_id
-        save_config("ids.json", ('admin_chat_id', admin_chat_id))
+        save_config("config/ids.json", ('admin_chat_id', admin_chat_id))
         bot.send_message(text="You're admin now!", chat_id=chat_id)
     elif chat_id == admin_chat_id:
         bot.send_message(text="You already are admin!", chat_id=chat_id)
@@ -357,9 +306,8 @@ def set_admin(bot, update):
 def skip(bot, update):
     chat_id = update.message.chat_id
     queue = queued_player.get_queue()
-    if len(queue) == 0:
-        bot.send_message(chat_id=chat_id,
-                         text="No songs in queue", reply_to_message_id=update.message.message_id)
+    if not queue:
+        bot.send_message(chat_id=chat_id, text="No songs in queue")
         return
 
     @keyboard_answer_handler
@@ -381,8 +329,7 @@ def move_song(bot, update):
     queue = queued_player.get_queue()
 
     if len(queue) <= 1:
-        bot.send_message(chat_id=chat_id,
-                         text="Not >1 songs in queue", reply_to_message_id=message.message_id)
+        bot.send_message(chat_id=chat_id, text="Not >1 songs in queue")
         return
 
     @keyboard_answer_handler
@@ -424,44 +371,32 @@ def next_song(bot, update):
         answer_current_song(bot, update)
 
 
-def get_gmusic_inline_handler():
-    def _search_song(query):
-        max_results = 20
-        results = api.search(query, max_results)
-        songs = []
-        for track in results["song_hits"]:
-            song = track["track"]
-            songs.append(song)
-        return songs
-
+def get_inline_handler(api, suggest=False):
     def _get_inline_result_article(song):
-        if "store_id" in song:
-            song_id = song['store_id']
-        else:
-            song_id = song["storeId"]
-        song_title = song["title"]
-        artist = song["artist"]
-        song_str = "{} - {}".format(artist, song_title)
+        try:
+            artist = song.artist
+            title = song.title
+            str_rep = str(song)
+            if artist and title:
+                description = "by {}".format(artist)
+            else:
+                title = str_rep
+                description = ""
 
-        # Manually save the song name since it's impossible to retrieve song
-        # info from uploaded songs (which can occur in the radio station songs)
-        song_names[song_id] = song_str
+            result = InlineQueryResultArticle(
+                id=song.song_id,
+                title=title,
+                description=description,
+                input_message_content=InputTextMessageContent(str_rep)
+            )
 
-        result = InlineQueryResultArticle(
-            id=song_id,
-            title=song_title,
-            description="by {}".format(artist),
-            input_message_content=InputTextMessageContent(song_str)
-        )
-
-        if "albumArtRef" in song:
-            ref = song["albumArtRef"]
-            if len(ref) > 0:
-                ref = ref[0]
-                if "url" in ref:
-                    url = ref["url"]
-                    result.thumb_url = url
-        return result
+            url = song.albumArtUrl
+            if url:
+                result.thumb_url = url
+            return result
+        except Exception as e:
+            print(e)
+            return None
 
     @multithreaded_command
     def _inline_handler(bot, update):
@@ -470,10 +405,10 @@ def get_gmusic_inline_handler():
 
         query = update.inline_query.query
         if query:
-            song_list = _search_song(query)
+            song_list = api.search_song(query)
             # set server-side caching time to default (300 seconds)
             cache_time = 300
-        elif enable_suggestions:
+        elif suggest:
             song_list = queued_player.get_song_suggestions(20)
             cache_time = 20
         else:
@@ -481,16 +416,13 @@ def get_gmusic_inline_handler():
 
         # Filter duplicate songs
         seen = set()
+        seen_add = seen.add
 
         def _seen_add(song):
-            if "store_id" in song:
-                store_id = song['store_id']
-            else:
-                store_id = song["storeId"]
-            if store_id in seen:
+            if song in seen:
                 return False
             else:
-                seen.add(store_id)
+                seen_add(song)
                 return True
 
         song_list = filter(_seen_add, song_list)
@@ -501,133 +433,20 @@ def get_gmusic_inline_handler():
     return _inline_handler
 
 
-def get_youtube_inline_handler():
-    def _search_song(query):
-        qs = {
-            'q': query,
-            'maxResults': 20,
-            'safeSearch': "none",
-            'part': 'id,snippet',
-            'type': 'video',
-            'key': youtube_api_key
-        }
-
-        wdata = pafy.call_gdata('search', qs)
-        return wdata['items']
-
-    def _get_inline_result_article(song):
-        song_id = song['id']['videoId']
-        snippet = song['snippet']
-        title = snippet['title']
-        song_names[song_id] = title
-        description = snippet["description"]
-        result = InlineQueryResultArticle(
-            id=song_id,
-            title=title,
-            description=description,
-            input_message_content=InputTextMessageContent(title)
-        )
-
-        if "thumbnails" in snippet:
-            thumbnails = snippet['thumbnails']
-            url = thumbnails['medium']['url']
-            result.thumb_url = url
-
-        return result
-
+def queue(api):
     @multithreaded_command
-    def _inline_handler(bot, update):
-        if not is_logged_in(update.inline_query.from_user):
+    def _queue(bot, update):
+        song_id = update.chosen_inline_result["result_id"]
+        user = update.chosen_inline_result["from_user"]
+
+        if not is_logged_in(user):
             return
 
-        query = update.inline_query.query
-        if not query:
-            return
+        song = api.lookup_song(song_id)
+        print("QUEUED by", user["first_name"], ":", song)
+        queued_player.queue(song)
 
-        search_results = _search_song(query)
-        results = list(map(_get_inline_result_article, search_results))
-        bot.answerInlineQuery(update.inline_query.id, results)
-
-    return _inline_handler
-
-
-def get_soundcloud_inline_handler():
-    def _search_song(query):
-        return soundcloud_client.get("tracks/", q=query)
-
-    def _get_inline_result_article(track):
-        song_id = track.id
-        title = track.title
-        song_names[song_id] = track
-        description = track.user['username']
-        result = InlineQueryResultArticle(
-            id=song_id,
-            title=title,
-            description=description,
-            input_message_content=InputTextMessageContent(title),
-            thumb_url=track.artwork_url
-        )
-        return result
-
-    @multithreaded_command
-    def _inline_handler(bot, update):
-        if not is_logged_in(update.inline_query.from_user):
-            return
-
-        query = update.inline_query.query
-        if not query:
-            return
-
-        search_results = _search_song(query)
-        results = list(map(_get_inline_result_article, search_results))
-        bot.answerInlineQuery(update.inline_query.id, results)
-
-    return _inline_handler
-
-
-# Since inline query results can be cached, the queue methods have to
-# check for client authentication too
-
-@multithreaded_command
-def gmusic_queue(bot, update):
-    storeId = update.chosen_inline_result["result_id"]
-    user = update.chosen_inline_result["from_user"]
-
-    if not is_logged_in(user):
-        return
-
-    song_name = lookup_gmusic_song_name(storeId)
-    print("GM_QUEUED by", user["first_name"], ":", song_name)
-    queued_player.queue(
-        {'store_id': storeId, 'load_song': player.get_gmusic_loader(api, storeId), 'name': song_name})
-
-
-@multithreaded_command
-def youtube_queue(bot, update):
-    video_id = update.chosen_inline_result["result_id"]
-    user = update.chosen_inline_result["from_user"]
-
-    if not is_logged_in(user):
-        return
-
-    song_name = lookup_youtube_song_name(video_id)
-    print("YT_QUEUED by", user["first_name"], ":", song_name)
-    queued_player.queue({'store_id': video_id, 'load_song': player.get_youtube_loader(
-        video_id), 'name': song_name})
-
-
-@multithreaded_command
-def soundcloud_queue(bot, update):
-    song_id = update.chosen_inline_result["result_id"]
-    user = update.chosen_inline_result["from_user"]
-
-    if not is_logged_in(user):
-        return
-
-    track = lookup_soundcloud_track(song_id)
-    print("SC_QUEUED by", user["first_name"], ":", track.title)
-    queued_player.queue({'store_id': song_id, 'load_song': player.get_soundcloud_loader(
-        soundcloud_client, track), 'name': track.title})
+    return _queue
 
 
 # Admin commands
@@ -639,8 +458,9 @@ def clear_queue(bot, update):
 
 @admin_command
 def reset_bot(bot, update):
-    save_config("ids.json", ('admin_chat_id', 0))
-    queued_player.reset()
+    save_config("config/ids.json", ('admin_chat_id', 0))
+    queued_player.close()
+    gmusic_api.reset()
     exit_bot()
 
 
@@ -662,6 +482,7 @@ def toggle_password(bot, update):
     else:
         enable_session_password = True
         bot.send_message(chat_id=chat_id, text="Password is now enabled. Set a password with /setpassword [password]")
+    save_config("config/config.json", ("enable_session_password", enable_session_password))
 
 
 @admin_command
@@ -684,8 +505,7 @@ def set_password(bot, update):
 
     session_password = password
     session_clients.add(user_tuple_from_user(update.message.from_user))
-    bot.send_message(
-        chat_id=chat_id, text="Successfully changed password")
+    bot.send_message(chat_id=chat_id, text="Successfully changed password")
 
 
 @multithreaded_command
@@ -703,8 +523,7 @@ def ban_user(bot, update):
         return
 
     text = "Who should be banned?"
-    keyboard_items = list(
-        map(lambda client_tuple: "{}) {}".format(client_tuple[0], client_tuple[1]), session_clients))
+    keyboard_items = list(map(lambda client_tuple: "{}) {}".format(client_tuple[0], client_tuple[1]), session_clients))
 
     def _ban_action(ban_id):
         global session_clients
@@ -723,16 +542,15 @@ def set_quality(bot, update):
     chat_id = update.message.chat_id
     split = update.message.text.split(" ")
     if len(split) < 2:
-        bot.send_message(
-            chat_id=chat_id, text="Usage: /setquality [hi/med/low]")
+        bot.send_message(chat_id=chat_id, text="Usage: /setquality [hi/med/low]")
         return
 
     quality = split[1]
-    if quality in ["hi", "med", "low"]:
-        player.quality = quality
-        save_config(("quality", quality))
-        bot.send_message(chat_id=chat_id, text="Successfully changes quality")
-    else:
+    try:
+        gmusic_api.set_quality(quality)
+        save_config("config/config.json", ("quality", quality))
+        bot.send_message(chat_id=chat_id, text="Successfully changed quality")
+    except ValueError:
         bot.send_message(chat_id=chat_id, text="Invalid quality")
         return
 
@@ -746,7 +564,7 @@ def exit_bot_command(bot, update):
 @admin_command
 def remove_from_playlist(bot, update):
     chat_id = update.message.chat_id
-    playlist = queued_player.get_remote_playlist()
+    playlist = gmusic_api.get_playlist()
 
     if not playlist:
         bot.send_message(chat_id=chat_id, text="The playlist is empty.")
@@ -757,16 +575,18 @@ def remove_from_playlist(bot, update):
         if "|" not in text:
             return False
 
-        store_id = text.split("|")[1].strip()
-        if store_id not in playlist:
+        song_id = text.split("|")[1].strip()
+        song = gmusic_api.lookup_song(song_id)
+
+        if song not in playlist:
             bot.send_message(chat_id=chat_id, text="That song is not in the BotPlaylist")
 
-        queued_player.remove_from_remote_playlist(store_id)
-        hide_keyboard(bot, chat_id, "Removed from playlist: " + lookup_gmusic_song_name(store_id))
+        gmusic_api.remove_from_playlist(song)
+
+        hide_keyboard(bot, chat_id, "Removed from playlist: " + str(song))
         return True
 
-    keyboard_items = list(map(lambda song: "{} | {}".format(song[0], song[1]), sorted(
-        map(lambda store_id: (lookup_gmusic_song_name(store_id), store_id), playlist), key=lambda item: item[0])))
+    keyboard_items = list(map(lambda song: "{} | {}".format(song, song.song_id), sorted(playlist)))
 
     send_keyboard(bot, chat_id, "What song should be removed?", keyboard_items, _action)
 
@@ -774,7 +594,7 @@ def remove_from_playlist(bot, update):
 @admin_command
 def reload_station_songs(bot, update):
     # Drop the pre-fetched next_songs list. The list will be refilled when needed.
-    queued_player.drop_station_songs()
+    gmusic_api.reload()
     bot.send_message(chat_id=update.message.chat_id, text="Reloaded station songs.")
 
 
@@ -821,8 +641,8 @@ def start_gmusic_bot():
     for plugin in plugin_loader.get_plugins():
         dispatcher.add_handler(CommandHandler(plugin.get_label(), plugin.run_command))
 
-    dispatcher.add_handler(InlineQueryHandler(get_gmusic_inline_handler()))
-    dispatcher.add_handler(ChosenInlineResultHandler(gmusic_queue))
+    dispatcher.add_handler(InlineQueryHandler(get_inline_handler(gmusic_api, enable_suggestions)))
+    dispatcher.add_handler(ChosenInlineResultHandler(queue(gmusic_api)))
 
     gmusic_updater.start_polling()
 
@@ -832,8 +652,8 @@ def start_youtube_bot():
     youtube_updater = Updater(token=youtube_token)
     dispatcher = youtube_updater.dispatcher
 
-    dispatcher.add_handler(InlineQueryHandler(get_youtube_inline_handler()))
-    dispatcher.add_handler(ChosenInlineResultHandler(youtube_queue))
+    dispatcher.add_handler(InlineQueryHandler(get_inline_handler(youtube_api)))
+    dispatcher.add_handler(ChosenInlineResultHandler(queue(youtube_api)))
     youtube_updater.start_polling()
 
 
@@ -842,8 +662,8 @@ def start_soundcloud_bot():
     soundcloud_updater = Updater(token=soundcloud_token)
     dispatcher = soundcloud_updater.dispatcher
 
-    dispatcher.add_handler(InlineQueryHandler(get_soundcloud_inline_handler()))
-    dispatcher.add_handler(ChosenInlineResultHandler(soundcloud_queue))
+    dispatcher.add_handler(InlineQueryHandler(get_inline_handler(soundcloud_api)))
+    dispatcher.add_handler(ChosenInlineResultHandler(queue(soundcloud_api)))
     soundcloud_updater.start_polling()
 
 
@@ -862,7 +682,7 @@ def exit_bot(updater_stopped=False):
     def exit_job():
         print("EXITING ...")
         if not updater_stopped:
-            gmusic_updater.signal_handler(signum=SIGTERM, frame=None)
+            gmusic_updater.signal_handler(signum=signal.SIGTERM, frame=None)
         print("GMusic Updater stopped")
         youtube_updater.stop()
         print("YouTube updater stopped")
@@ -870,7 +690,6 @@ def exit_bot(updater_stopped=False):
         print("SoundCloud updater stopped")
         queued_player.close()
         print("Player closed")
-        api.logout()
         print("EXIT")
         sys.exit(0)
     # There is a bug in python-telegram-bot that causes a deadlock if
@@ -879,41 +698,36 @@ def exit_bot(updater_stopped=False):
 
 
 # Load config and secrets
-with open("config.json", "r") as config_file:
-    config = json.loads(config_file.read())
-    gmusic_locale = config.get('gmusic_locale', 0)
-    if not gmusic_locale:
-        gmusic_locale = locale.getdefaultlocale()[0]
-    secrets_location = config.get('secrets_location', "")
-    secrets_path = path.join(secrets_location, "secrets.json")
-    enable_updates = config.get("auto_updates", 0)
-    enable_suggestions = config.get("suggest_songs", 0)
-    enable_session_password = config.get("enable_session_password", 1)
-    load_plugins = config.get("load_plugins", 1)
-    del config
+try:
+    with open("config/config.json", "r") as config_file:
+        config = json.loads(config_file.read())
+        secrets_location = config.get('secrets_location', "config")
+        secrets_path = os.path.join(secrets_location, "secrets.json")
+        enable_updates = config.get("auto_updates", 0)
+        enable_suggestions = config.get("suggest_songs", 0)
+        enable_session_password = config.get("enable_session_password", 1)
+        load_plugins = config.get("load_plugins", 1)
+except IOError as e:
+    print("Could not open config.json:", e)
+    exit(3)
 
-with open(secrets_path, "r") as secrets_file:
-    content = secrets_file.read()
-    content = json.loads(content)
-    content = {k: str.strip(v) for k, v in content.items()}
-    try:
-        gmusic_user = content["gmusic_username"]
-        gmusic_password = content["gmusic_password"]
-        gmusic_device_id = content.get("gmusic_device_id", None)
-        gmusic_token = content["gmusic_bot_token"]
-    except KeyError:
-        print("Missing GMusic secrets")
-        exit(2)
+try:
+    with open(secrets_path, "r") as secrets_file:
+        secrets = json.loads(secrets_file.read())
+        secrets = {k: str.strip(v) for k, v in secrets.items()}
+        try:
+            gmusic_token = secrets["gmusic_bot_token"]
+        except KeyError:
+            print("Missing GMusic token")
+            sys.exit(1)
 
-    youtube_token = content.get("youtube_bot_token", None)
-    youtube_api_key = content.get("youtube_api_key", None)
-    soundcloud_token = content.get("soundcloud_bot_token", None)
-    soundcloud_id = content.get("soundcloud_id", None)
-    del content
+        youtube_token = secrets.get("youtube_bot_token", None)
+        soundcloud_token = secrets.get("soundcloud_bot_token", None)
+except IOError:
+    print("Could not open secrets.json")
 
-
-if path.isfile("ids.json"):
-    with open("ids.json", "r") as ids_file:
+if os.path.isfile("config/ids.json"):
+    with open("config/ids.json", "r") as ids_file:
         ids = json.loads(ids_file.read())
         admin_chat_id = ids.get('admin_chat_id', 0)
         del ids
@@ -928,34 +742,17 @@ plugin_loader = PluginLoader()
 if load_plugins:
     plugin_loader.load_plugins()
 
-api = Mobileclient(debug_logging=False)
+try:
+    gmusic_api = music_apis.GMusicAPI(config, secrets)
+    if soundcloud_token:
+        soundcloud_api = music_apis.SoundCloudAPI(config, secrets)
+    if youtube_token:
+        youtube_api = music_apis.YouTubeAPI(config, secrets)
+except KeyError as e:
+    print(e)
+    sys.exit(2)
 
-missing_device_id = not gmusic_device_id
-if missing_device_id or gmusic_device_id.upper() == "MAC":
-    gmusic_device_id = Mobileclient.FROM_MAC_ADDRESS
-else:
-    if gmusic_device_id.startswith("0x"):
-        gmusic_device_id = gmusic_device_id[2:]
-
-if not api.login(gmusic_user, gmusic_password, gmusic_device_id, gmusic_locale):
-    print("Failed to log in to gmusic")
-    sys.exit(1)
-
-if missing_device_id:
-    devices = api.get_registered_devices()
-    api.logout()
-    print("No device ID provided, printing registered devices:")
-    print(json.dumps(devices, indent=4, sort_keys=True))
-    sys.exit(4)
-
-if youtube_token and youtube_api_key:
-    import pafy
-
-if soundcloud_id and soundcloud_token:
-    import soundcloud
-    soundcloud_client = soundcloud.Client(client_id=soundcloud_id)
-
-queued_player = Player(api, Notificator)
+queued_player = player.Player(gmusic_api, Notificator)
 gmusic_updater = None
 youtube_updater = None
 soundcloud_updater = None
@@ -964,7 +761,7 @@ soundcloud_updater = None
 def main():
     if enable_updates:
         print("Checking for updates...")
-        import updater
+        from telegrammusicbot import updater
         with open(os.devnull, 'w') as devnull:
             if updater.update(output=devnull):
                 print("Restarting after update...")
@@ -978,12 +775,12 @@ def main():
 
     start_gmusic_bot()
 
-    if youtube_token and youtube_api_key:
+    if youtube_token:
         start_youtube_bot()
     else:
         youtube_updater = True
 
-    if soundcloud_token and soundcloud_id:
+    if soundcloud_token:
         start_soundcloud_bot()
     else:
         soundcloud_updater = True
@@ -992,7 +789,8 @@ def main():
 
     # Wait until all updaters are initialized
     while(not (gmusic_updater and youtube_updater and soundcloud_updater)):
-        sleep(1)
+        time.sleep(1)
+
     try:
         gmusic_updater.idle()
     except InterruptedError:
