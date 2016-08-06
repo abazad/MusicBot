@@ -18,8 +18,10 @@ from telegram.ext.updater import Updater
 from telegram.replykeyboardhide import ReplyKeyboardHide
 from telegram.replykeyboardmarkup import ReplyKeyboardMarkup
 
-from telegrammusicbot import player, music_apis
-from telegrammusicbot.plugin_handler import PluginLoader
+import music_apis
+import player
+from plugin_handler import PluginLoader
+
 
 try:
     os.chdir("..")
@@ -709,7 +711,7 @@ try:
         load_plugins = config.get("load_plugins", 1)
 except IOError as e:
     print("Could not open config.json:", e)
-    exit(3)
+    sys.exit(3)
 
 try:
     with open(secrets_path, "r") as secrets_file:
@@ -725,6 +727,7 @@ try:
         soundcloud_token = secrets.get("soundcloud_bot_token", None)
 except IOError:
     print("Could not open secrets.json")
+    sys.exit(4)
 
 if os.path.isfile(ids_path):
     with open(ids_path, "r") as ids_file:
