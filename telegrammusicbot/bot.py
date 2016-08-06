@@ -24,6 +24,7 @@ from plugin_handler import PluginLoader
 
 
 try:
+    old_working_dir = cwd = os.getcwd()
     os.chdir("..")
 except OSError:
     print("Could not change dir")
@@ -768,6 +769,7 @@ def main():
         with open(os.devnull, 'w') as devnull:
             if updater.update(output=devnull):
                 print("Restarting after update...")
+                os.chdir(old_working_dir)
                 os.execl(sys.executable, sys.executable, *sys.argv)
                 sys.exit(0)
             else:
