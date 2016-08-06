@@ -1,7 +1,6 @@
 import json
 import locale
 import os
-import re
 import socket
 import threading
 import time
@@ -81,15 +80,16 @@ class _AbstractAPI(object):
     _download_semaphore = None
     _conversion_semaphore = None
 
-    def __init__(self, config):
-        songs_path = config['song_path']
-        if not re.compile(r'[ \S]+(\\|\/)$').match(songs_path):
-            songs_path += "/"
+    def __init__(self, config_dir, config):
+        songs_path = os.path.join(".", config.get("song_path", "songs"))
+
         try:
             if not os.path.isdir(songs_path):
                 os.makedirs(songs_path)
         except OSError:
             raise ValueError("Invalid song path")
+
+        self._config_dir = config_dir
         self._songs_path = songs_path
         self._create_semaphores(config)
         self._loading_ids = set()
@@ -183,8 +183,8 @@ class _AbstractAPI(object):
 
 class _AbstractSongProvider(_AbstractAPI):
 
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, config_dir, config):
+        super().__init__(config_dir, config)
 
     def get_song(self):
         '''
@@ -234,8 +234,9 @@ class GMusicAPI(_AbstractSongProvider):
     _songs = pylru.lrucache(256)
     _connect_lock = threading.Lock()
 
-    def __init__(self, config, secrets):
-        super().__init__(config)
+    def __init__(self, config_dir, config, secrets):
+        super().__init__(config_dir, config)
+        self._ids_path = os.path.join(config_dir, "ids.json")
         self._connect(config, secrets)
         self._quality = config.get("quality", "med")
         self._playlist_id = None
@@ -311,7 +312,7 @@ class GMusicAPI(_AbstractSongProvider):
         self._remote_playlist_delete()
         self._remote_station_delete()
         self._playlist.clear()
-        os.remove("../config/ids.json")
+        os.remove(self._ids_path)
 
     def _load_suggestions(self, max_len):
         self._remote_station_create()
@@ -392,8 +393,8 @@ class GMusicAPI(_AbstractSongProvider):
         self._api.delete_stations([self._station_id])
 
     def _load_ids(self):
-        if os.path.isfile("config/ids.json"):
-            with open("config/ids.json", "r") as id_file:
+        if os.path.isfile(self._ids_path):
+            with open(self._ids_path, "r") as id_file:
                 ids = json.loads(id_file.read())
                 id_file.close()
                 self._playlist_token = ids.get("playlist_token", None)
@@ -403,9 +404,8 @@ class GMusicAPI(_AbstractSongProvider):
                 self._station_id = ids.get("station_id", None)
 
     def _write_ids(self):
-        id_file_path = "config/ids.json"
-        if os.path.isfile(id_file_path):
-            with open(id_file_path, 'r') as id_file:
+        if os.path.isfile(self._ids_path):
+            with open(self._ids_path, 'r') as id_file:
                 ids = json.loads(id_file.read())
         else:
             ids = {}
@@ -414,7 +414,7 @@ class GMusicAPI(_AbstractSongProvider):
         ids['playlist_id'] = self._playlist_id
         ids['station_id'] = self._station_id
 
-        with open(id_file_path, 'w') as id_file:
+        with open(self._ids_path, 'w') as id_file:
             id_file.write(json.dumps(ids, indent=4, sort_keys=True))
 
     @staticmethod
@@ -514,8 +514,8 @@ class YouTubeAPI(_AbstractAPI):
     _songs = pylru.lrucache(256)
     _api_key = None
 
-    def __init__(self, config, secrets):
-        super().__init__(config)
+    def __init__(self, config_dir, config, secrets):
+        super().__init__(config_dir, config)
         try:
             self._api_key = secrets['youtube_api_key']
         except KeyError:
@@ -583,8 +583,8 @@ class SoundCloudAPI(_AbstractAPI):
     _client = None
     _connect_lock = threading.Lock()
 
-    def __init__(self, config, secrets):
-        super().__init__(config)
+    def __init__(self, config_dir, config, secrets):
+        super().__init__(config_dir, config)
         self._connect(secrets)
 
     def lookup_song(self, song_id):

@@ -27,20 +27,25 @@ except:
     print("Could not change dir")
     sys.exit(100)
 
+config_dir = "config"
+config_path = os.path.join(config_dir, "config.json")
+ids_path = os.path.join(config_dir, "ids.json")
+
 # Initialize colorama for colored output
 colorama.init()
 
 
 # Utility methods
 
-def save_config(file="config/config.json", *args):
-    config_file = open(file, 'r')
-    config = json.loads(config_file.read())
-    config_file.close()
-    for key, value in args:
-        config[key] = value
-    config_file = open(file, 'w')
-    config_file.write(json.dumps(config, indent=4, sort_keys=True))
+def save_config(file, **kwargs):
+    with open(file, 'r') as config_file:
+        config = json.loads(config_file.read())
+
+    for key in kwargs:
+        config[key] = kwargs[key]
+
+    with open(file, 'w') as config_file:
+        config_file.write(json.dumps(config, indent=4, sort_keys=True))
 
 
 keyboard_sent = {}
@@ -291,7 +296,7 @@ def set_admin(bot, update):
     chat_id = update.message.chat_id
     if not admin_chat_id:
         admin_chat_id = chat_id
-        save_config("config/ids.json", ('admin_chat_id', admin_chat_id))
+        save_config(ids_path, admin_chat_id=admin_chat_id)
         bot.send_message(text="You're admin now!", chat_id=chat_id)
     elif chat_id == admin_chat_id:
         bot.send_message(text="You already are admin!", chat_id=chat_id)
@@ -458,7 +463,7 @@ def clear_queue(bot, update):
 
 @admin_command
 def reset_bot(bot, update):
-    save_config("config/ids.json", ('admin_chat_id', 0))
+    save_config(ids_path, admin_chat_id=0)
     queued_player.close()
     gmusic_api.reset()
     exit_bot()
@@ -482,7 +487,7 @@ def toggle_password(bot, update):
     else:
         enable_session_password = True
         bot.send_message(chat_id=chat_id, text="Password is now enabled. Set a password with /setpassword [password]")
-    save_config("config/config.json", ("enable_session_password", enable_session_password))
+    save_config(config_path, enable_session_password=enable_session_password)
 
 
 @admin_command
@@ -548,7 +553,7 @@ def set_quality(bot, update):
     quality = split[1]
     try:
         gmusic_api.set_quality(quality)
-        save_config("config/config.json", ("quality", quality))
+        save_config(config_path, quality=quality)
         bot.send_message(chat_id=chat_id, text="Successfully changed quality")
     except ValueError:
         bot.send_message(chat_id=chat_id, text="Invalid quality")
@@ -699,7 +704,7 @@ def exit_bot(updater_stopped=False):
 
 # Load config and secrets
 try:
-    with open("config/config.json", "r") as config_file:
+    with open(config_path, "r") as config_file:
         config = json.loads(config_file.read())
         secrets_location = config.get('secrets_location', "config")
         secrets_path = os.path.join(secrets_location, "secrets.json")
@@ -726,8 +731,8 @@ try:
 except IOError:
     print("Could not open secrets.json")
 
-if os.path.isfile("config/ids.json"):
-    with open("config/ids.json", "r") as ids_file:
+if os.path.isfile(ids_path):
+    with open(ids_path, "r") as ids_file:
         ids = json.loads(ids_file.read())
         admin_chat_id = ids.get('admin_chat_id', 0)
         del ids
@@ -743,11 +748,11 @@ if load_plugins:
     plugin_loader.load_plugins()
 
 try:
-    gmusic_api = music_apis.GMusicAPI(config, secrets)
+    gmusic_api = music_apis.GMusicAPI(config_dir, config, secrets)
     if soundcloud_token:
-        soundcloud_api = music_apis.SoundCloudAPI(config, secrets)
+        soundcloud_api = music_apis.SoundCloudAPI(config_dir, config, secrets)
     if youtube_token:
-        youtube_api = music_apis.YouTubeAPI(config, secrets)
+        youtube_api = music_apis.YouTubeAPI(config_dir, config, secrets)
 except KeyError as e:
     print(e)
     sys.exit(2)
