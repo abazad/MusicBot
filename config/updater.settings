@@ -10,5 +10,4 @@ whitelist=0
 list=.gitignore
     .project
     .pydevproject
-    secrets.json
-    config.json
+    config
