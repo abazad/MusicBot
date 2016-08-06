@@ -49,6 +49,7 @@ class Song(object):
             raise NotImplementedError()
 
         fname = self._loader()
+        # When the song has been loaded, this method can be replaced by a simple method returning the filename
         self.load = lambda: fname
         return fname
 
@@ -258,7 +259,7 @@ class GMusicAPI(_AbstractSongProvider):
             try:
                 info = self._api.get_track_info(song_id)
             except CallFailure:
-                return Song(song_id, self._get_loader())
+                return Song(song_id, self._get_loader(song_id))
             return self._song_from_info(info)
 
     def search_song(self, query, max_fetch=50):

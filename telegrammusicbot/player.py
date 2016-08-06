@@ -32,11 +32,8 @@ class SongQueue(list):
             if song_id.startswith("T") and len(song_id) == 27:
                 self._song_provider.add_played(result)
         except IndexError:
-            try:
-                result = self._song_provider.get_song()
-                self._prepare_event.set()
-            except Exception as e:
-                print(e)
+            result = self._song_provider.get_song()
+            self._prepare_event.set()
         return result
 
     def append(self, song):

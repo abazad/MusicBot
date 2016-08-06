@@ -23,7 +23,7 @@ from telegrammusicbot.plugin_handler import PluginLoader
 
 try:
     os.chdir("..")
-except:
+except OSError:
     print("Could not change dir")
     sys.exit(100)
 
@@ -378,30 +378,26 @@ def next_song(bot, update):
 
 def get_inline_handler(api, suggest=False):
     def _get_inline_result_article(song):
-        try:
-            artist = song.artist
-            title = song.title
-            str_rep = str(song)
-            if artist and title:
-                description = "by {}".format(artist)
-            else:
-                title = str_rep
-                description = ""
+        artist = song.artist
+        title = song.title
+        str_rep = str(song)
+        if artist and title:
+            description = "by {}".format(artist)
+        else:
+            title = str_rep
+            description = ""
 
-            result = InlineQueryResultArticle(
-                id=song.song_id,
-                title=title,
-                description=description,
-                input_message_content=InputTextMessageContent(str_rep)
-            )
+        result = InlineQueryResultArticle(
+            id=song.song_id,
+            title=title,
+            description=description,
+            input_message_content=InputTextMessageContent(str_rep)
+        )
 
-            url = song.albumArtUrl
-            if url:
-                result.thumb_url = url
-            return result
-        except Exception as e:
-            print(e)
-            return None
+        url = song.albumArtUrl
+        if url:
+            result.thumb_url = url
+        return result
 
     @multithreaded_command
     def _inline_handler(bot, update):
@@ -517,7 +513,6 @@ def set_password(bot, update):
 @admin_command
 def ban_user(bot, update):
     chat_id = update.message.chat_id
-    global session_clients
 
     if not enable_session_password:
         bot.send_message(chat_id=chat_id, text="Password is disabled")

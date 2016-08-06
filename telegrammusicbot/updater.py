@@ -21,7 +21,7 @@ def _go_through_files(data, repo_name, bw_list, is_whitelist, file=sys.stdout):
         if(content["type"] == "dir"):
             resp = requests.get(
                 url="https://api.github.com/repos/" + repo_name + "/contents/" + content["name"])
-            if _go_through_files(json.loads(resp.text), file):
+            if _go_through_files(json.loads(resp.text), repo_name, bw_list, is_whitelist, file):
                 updated = True
 
         try:  # check if the file is there
