@@ -295,7 +295,7 @@ class GMusicAPI(_AbstractSongProvider):
             self._remote_playlist_remove(song)
             self._playlist.remove(song)
 
-    def get_suggestions(self, max_len):
+    def get_suggestions(self, max_len=50):
         if len(self._suggestions) < max_len:
             self._load_suggestions(max_len)
 

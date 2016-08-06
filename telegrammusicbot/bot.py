@@ -414,7 +414,7 @@ def get_inline_handler(api, suggest=False):
             # set server-side caching time to default (300 seconds)
             cache_time = 300
         elif suggest:
-            song_list = queued_player.get_song_suggestions(20)
+            song_list = api.get_suggestions()
             cache_time = 20
         else:
             return
