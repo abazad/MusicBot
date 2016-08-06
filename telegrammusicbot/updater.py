@@ -1,31 +1,26 @@
 import configparser
 import hashlib
 import json
-import requests
+import os
 import sys
 
-# get config
-config = configparser.ConfigParser()
-config.read_file(open('updater.settings'))
-repoName = config.get("Section1", "repo")
-whitelist = config.getboolean("Section1", "whitelist")
-BoWList = str(config.get("Section1", "list")).split("\n")
+import requests
 
 
-def _go_through_files(data, file=sys.stdout):
+def _go_through_files(data, repo_name, bw_list, is_whitelist, file=sys.stdout):
     updated = False
     for content in data:
         print(content["name"], file=file)
 
         # check if file is in the black/whitelist
-        if (content["name"] in BoWList) != whitelist:
+        if (content["name"] in bw_list) != is_whitelist:
             print("file found in blacklist/not found in whitelist", file=file)
             continue
 
         # if there is a directory go through it per recursive call
         if(content["type"] == "dir"):
             resp = requests.get(
-                url="https://api.github.com/repos/" + repoName + "/contents/" + content["name"])
+                url="https://api.github.com/repos/" + repo_name + "/contents/" + content["name"])
             if _go_through_files(json.loads(resp.text), file):
                 updated = True
 
@@ -60,15 +55,20 @@ def _go_through_files(data, file=sys.stdout):
 
 
 def update(output=sys.stdout):
+    config = configparser.ConfigParser()
+    config.read_file(open('config/updater.settings'))
+    repo_name = config.get("Section1", "repo")
+    is_whitelist = config.getboolean("Section1", "whitelist")
+    bw_list = str(config.get("Section1", "list")).split("\n")
     # get a list of files in the repo
-    resp = requests.get(
-        url="https://api.github.com/repos/" + repoName + "/contents")
+    resp = requests.get(url="https://api.github.com/repos/" + repo_name + "/contents")
     data = json.loads(resp.text)
     # check these files
-    return _go_through_files(data, output)
+    return _go_through_files(data, repo_name, bw_list, is_whitelist, output)
 
 
 def main():
+    os.chdir("..")
     update()
 
 
