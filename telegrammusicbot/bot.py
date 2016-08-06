@@ -764,7 +764,7 @@ soundcloud_updater = None
 def main():
     if enable_updates:
         print("Checking for updates...")
-        from telegrammusicbot import updater
+        import updater
         with open(os.devnull, 'w') as devnull:
             if updater.update(output=devnull):
                 print("Restarting after update...")
