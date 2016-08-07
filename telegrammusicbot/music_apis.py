@@ -122,21 +122,22 @@ class _AbstractAPI(object):
         '''
         def _loader():
             loading_ids_lock = self._loading_ids_lock
-            loading_ids = self._loading_ids
-
             loading_ids_lock.acquire()
-            if song_id in loading_ids:
+            if song_id in self._loading_ids:
                 loading_ids_lock.release()
-                time.sleep(2)
+                time.sleep(0.5)
                 return _loader()
             else:
-                loading_ids.add(song_id)
+                self._loading_ids.add(song_id)
                 loading_ids_lock.release()
 
             if isinstance(native_format, str):
                 _native_format = native_format
-            else:
+            elif hasattr(native_format, "__call__"):
                 _native_format = native_format()
+            else:
+                raise ValueError("native_format has to be a string or a function returning a string")
+
             songs_path = self._songs_path
             fname = os.path.join(songs_path, ".".join([song_id, "wav"]))
             native_fname = os.path.join(songs_path, ".".join([song_id, _native_format]))
@@ -144,31 +145,28 @@ class _AbstractAPI(object):
             isfile = os.path.isfile
             if not isfile(fname):
                 if not isfile(native_fname):
-                    self._download_semaphore.acquire()
-                    if not isfile(native_fname):
-                        native_fname_tmp = native_fname + ".tmp"
-                        if isfile(native_fname_tmp):
-                            os.remove(native_fname_tmp)
+                    with self._download_semaphore:
+                        if not isfile(native_fname):
+                            native_fname_tmp = native_fname + ".tmp"
+                            if isfile(native_fname_tmp):
+                                os.remove(native_fname_tmp)
 
-                        download(native_fname_tmp)
+                            download(native_fname_tmp)
+                            os.rename(native_fname_tmp, native_fname)
 
-                        os.rename(native_fname_tmp, native_fname)
-                    self._download_semaphore.release()
-
-                self._conversion_semaphore.acquire()
-                if not isfile(fname):
-                    song = AudioSegment.from_file(native_fname, _native_format)
-                    song = effects.normalize(song)
-                    fname_tmp = fname + ".tmp"
-                    if isfile(fname_tmp):
-                        os.remove(fname_tmp)
-                    song.export(fname_tmp, "wav")
-                    os.remove(native_fname)
-                    os.rename(fname_tmp, fname)
-                self._conversion_semaphore.release()
+                with self._conversion_semaphore:
+                    if not isfile(fname):
+                        song = AudioSegment.from_file(native_fname, _native_format)
+                        song = effects.normalize(song)
+                        fname_tmp = fname + ".tmp"
+                        if isfile(fname_tmp):
+                            os.remove(fname_tmp)
+                        song.export(fname_tmp, "wav")
+                        os.remove(native_fname)
+                        os.rename(fname_tmp, fname)
 
             loading_ids_lock.acquire()
-            loading_ids.remove(song_id)
+            self._loading_ids.remove(song_id)
             loading_ids_lock.release()
             return fname
         return _loader
