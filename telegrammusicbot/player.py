@@ -11,14 +11,14 @@ class SongQueue(list):
         self._song_provider = song_provider
         self._append_lock = threading.Lock()
         self._notificator = notificator
-        threading.Thread(name="prepareThread", target=self._prepare_next).start()
+        threading.Thread(name="prepare_thread", target=self._prepare_next).start()
 
     def _prepare_next(self):
         while not self._stop_preparing:
-            print("PREPARING")
             next_song = self._song_provider.get_suggestions(1)[0]
+            print("PREPARING", str(next_song))
             next_song.load()
-            print("FINISHED PREPARING")
+            print("FINISHED PREPARING", str(next_song))
             self._prepare_event.wait()
             self._prepare_event.clear()
 
@@ -63,7 +63,6 @@ class Player(object):
         self._queue = SongQueue(api, notificator)
         self._current_song = None
         self._lock = threading.Lock()
-        self._barrier = threading.Barrier(2)
         self._notificator = notificator
 
     def queue(self, song):
@@ -95,27 +94,23 @@ class Player(object):
         self._queue.clear()
 
     def _on_song_end(self):
-        if not self._lock.acquire(blocking=False):
-            if threading.current_thread().name == "player_thread":
-                self._barrier.wait()
-            return
-        song = self._queue.pop(0)
-        if not song or self._stop:
-            return
-        fname = song.load()
+        if self._lock.acquire(blocking=False):
+            song = self._queue.pop(0)
+            if not song or self._stop:
+                return
+            fname = song.load()
 
-        wave_obj = self._sa.WaveObject.from_wave_file(fname)
-        if self._player:
-            self._player.stop()
-        self._player = wave_obj.play()
-        self._current_song = song
+            wave_obj = self._sa.WaveObject.from_wave_file(fname)
+            if self._player:
+                self._player.stop()
+            self._player = wave_obj.play()
+            self._current_song = song
 
-        NotificationCause = self._notificator.NotificationCause
-        self._notificator.notify(NotificationCause.next_song())
+            NotificationCause = self._notificator.NotificationCause
+            self._notificator.notify(NotificationCause.next_song())
 
-        if threading.current_thread().name != "player_thread":
-            self._barrier.wait()
-        self._lock.release()
+            time.sleep(1)
+            self._lock.release()
 
     def run(self):
         def _run():
