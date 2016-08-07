@@ -76,7 +76,7 @@ class Song(object):
         return self.__str__() < other.__str__()
 
 
-class _AbstractAPI(object):
+class AbstractAPI(object):
 
     _download_semaphore = None
     _conversion_semaphore = None
@@ -180,7 +180,7 @@ class _AbstractAPI(object):
             cls._conversion_semaphore = threading.Semaphore(max_conversions)
 
 
-class _AbstractSongProvider(_AbstractAPI):
+class AbstractSongProvider(_AbstractAPI):
 
     def __init__(self, config_dir, config):
         super().__init__(config_dir, config)
@@ -228,7 +228,7 @@ class _AbstractSongProvider(_AbstractAPI):
         raise NotImplementedError()
 
 
-class GMusicAPI(_AbstractSongProvider):
+class GMusicAPI(AbstractSongProvider):
     _api = None
     _songs = pylru.lrucache(256)
     _connect_lock = threading.Lock()
@@ -508,7 +508,7 @@ class GMusicAPI(_AbstractSongProvider):
                 cls._connect_lock.release()
 
 
-class YouTubeAPI(_AbstractAPI):
+class YouTubeAPI(AbstractAPI):
     _pafy = __import__("pafy")
     _songs = pylru.lrucache(256)
     _api_key = None
@@ -576,7 +576,7 @@ class YouTubeAPI(_AbstractAPI):
         return self._get_thread_safe_loader(song_id, _get_audio_extension, _download)
 
 
-class SoundCloudAPI(_AbstractAPI):
+class SoundCloudAPI(AbstractAPI):
     _soundcloud = __import__("soundcloud")
     _songs = pylru.lrucache(256)
     _client = None
