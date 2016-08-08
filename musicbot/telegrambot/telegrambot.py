@@ -1,7 +1,9 @@
 import json
 import os
+import signal
 import socket
-import sys
+from threading import Thread
+import time
 
 from telegram import replykeyboardmarkup, replykeyboardhide, inlinequeryresultarticle
 import telegram
@@ -374,7 +376,11 @@ class TelegramBot(notifier.Subscribable):
         self._options.save_config("ids.json", admin_chat_id=0)
         self._player.close()
         self._music_api.reset()
-        sys.exit(0)
+
+        def _exit():
+            time.sleep(1)
+            os.kill(os.getpid(), signal.SIGINT)
+        Thread(name="EXIT_THREAD", target=_exit).start()
 
     @dispatcher.run_async
     @decorators.admin_command
@@ -464,7 +470,10 @@ class TelegramBot(notifier.Subscribable):
 
     @decorators.admin_command
     def exit_command(self, bot, update):
-        sys.exit(0)
+        def _exit():
+            time.sleep(1)
+            os.kill(os.getpid(), signal.SIGINT)
+        Thread(name="EXIT_THREAD", target=_exit).start()
 
     @dispatcher.run_async
     @decorators.admin_command
