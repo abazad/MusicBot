@@ -1,5 +1,6 @@
 import json
 import os
+import signal
 import sys
 
 import colorama
@@ -91,4 +92,4 @@ try:
     gmusic_bot.idle()
 except InterruptedError:
     pass
-sys.exit(0)
+os.kill(os.getpid(), signal.SIGINT)
