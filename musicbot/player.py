@@ -1,16 +1,16 @@
 import threading
 import time
+from musicbot.telegrambot.notifier import Notifier, Cause
 
 
 class SongQueue(list):
 
-    def __init__(self, song_provider, notificator):
+    def __init__(self, song_provider):
         super().__init__()
         self._stop_preparing = False
         self._prepare_event = threading.Event()
         self._song_provider = song_provider
         self._append_lock = threading.Lock()
-        self._notificator = notificator
         threading.Thread(name="prepare_thread", target=self._prepare_next).start()
 
     def _prepare_next(self):
@@ -45,25 +45,23 @@ class SongQueue(list):
                 list.append(self, song)
             self._append_lock.release()
             print("FINISHED LOADING APPENDED SONG")
-            NotificationCause = self._notificator.NotificationCause
-            self._notificator.notify(NotificationCause.queue_add(song))
+            Notifier.notify(Cause.queue_add(song))
 
         threading.Thread(target=_append, name="append_thread").start()
 
 
 class Player(object):
 
-    def __init__(self, api, notificator):
+    def __init__(self, api):
         import simpleaudio
         self._sa = simpleaudio
         self._player = None
         self._stop = False
         self._pause = False
         self._api = api
-        self._queue = SongQueue(api, notificator)
+        self._queue = SongQueue(api)
         self._current_song = None
         self._lock = threading.Lock()
-        self._notificator = notificator
 
     def queue(self, song):
         self._queue.append(song)
@@ -73,8 +71,7 @@ class Player(object):
 
     def skip_song(self, queue_position):
         song = self._queue.pop(queue_position)
-        NotificationCause = self._notificator.NotificationCause
-        self._notificator.notify(NotificationCause.queue_remove(song))
+        Notifier.notify(Cause.queue_remove(song))
 
     def pause(self):
         self._pause = True
@@ -106,8 +103,7 @@ class Player(object):
             self._player = wave_obj.play()
             self._current_song = song
 
-            NotificationCause = self._notificator.NotificationCause
-            self._notificator.notify(NotificationCause.next_song())
+            Notifier.notify(Cause.current_song(song))
 
             time.sleep(1)
             self._lock.release()

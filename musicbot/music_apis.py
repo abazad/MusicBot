@@ -180,7 +180,7 @@ class AbstractAPI(object):
             cls._conversion_semaphore = threading.Semaphore(max_conversions)
 
 
-class AbstractSongProvider(_AbstractAPI):
+class AbstractSongProvider(AbstractAPI):
 
     def __init__(self, config_dir, config):
         super().__init__(config_dir, config)
