@@ -20,7 +20,7 @@ def _go_through_files(cur_dir, data, repo_name, bw_list, is_whitelist, file=sys.
 
         # if there is a directory go through it per recursive call
         if(content["type"] == "dir"):
-            resp = requests.get(url="https://api.github.com/repos/" + repo_name + "/contents/" + path)
+            resp = requests.get(url=content['url'])
             if _go_through_files(path, json.loads(resp.text), repo_name, bw_list, is_whitelist, file):
                 updated = True
             continue
@@ -69,7 +69,6 @@ def update(output=sys.stdout):
 
 
 def main():
-    os.chdir("..")
     update()
 
 
