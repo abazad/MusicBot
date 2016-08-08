@@ -115,7 +115,7 @@ class TelegramBot(notifier.Subscribable):
         _dispatcher.add_handler(CommandHandler('stationreload', self.station_reload_command))
 
         for plugin in plugins:
-            _dispatcher.add_handler(plugin.get_label(), plugin.run_command)
+            _dispatcher.add_handler(CommandHandler(plugin.get_label(), plugin.run_command))
 
         _dispatcher.add_handler(InlineQueryHandler(self.handle_inline_query))
         _dispatcher.add_handler(ChosenInlineResultHandler(self.queue_command))
