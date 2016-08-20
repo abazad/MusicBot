@@ -105,10 +105,10 @@ class AbstractAPI(object):
         '''
         raise NotImplementedError()
 
-    def search_song(self, query, max_fetch=50):
+    def search_song(self, query, max_fetch=1000):
         '''
         Search for songs.
-        Return a generator yielding Song objects.
+        Return a list of Song objects.
         The max_fetch argument may or may not determine how many songs are fetched at once.
         '''
         raise NotImplementedError()
@@ -262,11 +262,13 @@ class GMusicAPI(AbstractSongProvider):
                 return Song(song_id, self._get_loader(song_id))
             return self._song_from_info(info)
 
-    def search_song(self, query, max_fetch=50):
+    def search_song(self, query, max_fetch=100):
+        max_fetch = min(100, max_fetch)
         results = self._api.search(query, max_fetch)
+        _song_from_info = self._song_from_info
         for track in results['song_hits']:
             info = track['track']
-            yield self._song_from_info(info)
+            yield _song_from_info(info)
 
     def set_quality(self, quality):
         quality = quality.strip()
@@ -540,7 +542,8 @@ class YouTubeAPI(AbstractAPI):
             songs[song_id] = song
             return song
 
-    def search_song(self, query, max_fetch=10):
+    def search_song(self, query, max_fetch=50):
+        max_fetch = min(50, max_fetch)
         qs = {
             'q': query,
             'maxResults': max_fetch,
@@ -550,8 +553,7 @@ class YouTubeAPI(AbstractAPI):
             'key': self._api_key
         }
 
-        songs = self._pafy.call_gdata('search', qs)['items']
-        for track in songs:
+        def _track_to_song(track):
             song_id = track['id']['videoId']
             snippet = track['snippet']
             title = snippet['title']
@@ -563,7 +565,10 @@ class YouTubeAPI(AbstractAPI):
             except KeyError:
                 pass
 
-            yield Song(song_id, self._get_loader(song_id), albumArtUrl=url, str_rep=title)
+            return Song(song_id, self._get_loader(song_id), albumArtUrl=url, str_rep=title)
+
+        songs = self._pafy.call_gdata('search', qs)['items']
+        return list(map(_track_to_song, songs))
 
     def _get_loader(self, song_id):
         audio = None
@@ -601,10 +606,20 @@ class SoundCloudAPI(AbstractAPI):
             info = self._client.get("/tracks/{}".format(song_id))
             return self._song_from_info(info)
 
-    def search_song(self, query, max_fetch=50):
-        tracks = self._client.get("tracks/", q=query)
-        for info in tracks:
-            yield self._song_from_info(info)
+    def search_song(self, query, max_fetch=200):
+        max_fetch = min(50, max_fetch)
+        resource = self._client.get("tracks/", q=query, limit=max_fetch, linked_partitioning=1)
+        _info_to_song = self._song_from_info
+        while True:
+            for info in resource.collection:
+                song = _info_to_song(info)
+                yield song
+
+            try:
+                next_href = resource.next_href
+                resource = self._client.get(next_href)
+            except AttributeError:
+                break
 
     def _get_loader(self, song_id, stream_url):
         def _download(path):

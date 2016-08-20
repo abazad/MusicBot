@@ -6,6 +6,7 @@ import socket
 from threading import Thread
 import time
 
+from pylru import lrucache
 from telegram import replykeyboardmarkup, replykeyboardhide, inlinequeryresultarticle
 import telegram
 from telegram.ext import dispatcher
@@ -118,7 +119,7 @@ class TelegramBot(notifier.Subscribable):
         for plugin in plugins:
             _dispatcher.add_handler(CommandHandler(plugin.get_label(), plugin.run_command))
 
-        _dispatcher.add_handler(InlineQueryHandler(self.handle_inline_query))
+        _dispatcher.add_handler(InlineQueryHandler(self.get_inline_query_handler()))
         _dispatcher.add_handler(ChosenInlineResultHandler(self.queue_command))
 
     def send_keyboard(self, bot, chat_id, text, items, action=None):
@@ -299,8 +300,11 @@ class TelegramBot(notifier.Subscribable):
         if not self.is_subscriber(update.message.chat_id):
             self.current_song_command(bot, update)
 
-    @dispatcher.run_async
-    def handle_inline_query(self, bot, update):
+    def get_inline_query_handler(self):
+        generators_cache = lrucache(256)
+        lists_cache = lrucache(256)
+        max_len = 20
+
         def _get_inline_result_article(song):
             artist = song.artist
             title = song.title
@@ -323,37 +327,70 @@ class TelegramBot(notifier.Subscribable):
                 result.thumb_url = url
             return result
 
-        if not self.is_logged_in(update.inline_query.from_user):
-            return
+        @dispatcher.run_async
+        def _handler(bot, update):
+            if not self.is_logged_in(update.inline_query.from_user):
+                return
 
-        query = update.inline_query.query
-        api = self._music_api
-        suggest = self._options.enable_suggestions and isinstance(api, music_apis.AbstractSongProvider)
-        if query:
-            song_list = api.search_song(query)
-            # set server-side caching time to default (300 seconds)
-            cache_time = 300
-        elif suggest:
-            song_list = api.get_suggestions()
-            cache_time = 20
-        else:
-            return
-
-        # Filter duplicate songs
-        seen = set()
-        seen_add = seen.add
-
-        def _seen_add(song):
-            if song in seen:
-                return False
+            offset = update.inline_query.offset
+            if offset:
+                offset = int(offset)
             else:
-                seen_add(song)
-                return True
+                offset = 0
+            query = update.inline_query.query
+            api = self._music_api
 
-        song_list = filter(_seen_add, song_list)
+            suggest = self._options.enable_suggestions and isinstance(api, music_apis.AbstractSongProvider)
+            if query and query.strip():
+                query = query.strip()
+                try:
+                    song_generator = generators_cache[query]
+                except KeyError:
+                    song_generator = api.search_song(query)
+                    generators_cache[query] = song_generator
+                    lists_cache[query] = []
 
-        results = list(map(_get_inline_result_article, song_list))
-        bot.answerInlineQuery(update.inline_query.id, results, cache_time=cache_time)
+                song_list = lists_cache[query]
+                song_list_len = len(song_list)
+
+                next_offset = offset + max_len
+                while next_offset >= song_list_len:
+                    try:
+                        song_list.append(song_generator.__next__())
+                        song_list_len += 1
+                    except StopIteration:
+                        next_offset = 0
+                        break
+
+                # set server-side caching time to default (300 seconds)
+                cache_time = 300
+
+                song_list = song_list[offset:]
+                song_list = song_list[:max_len]
+            elif suggest:
+                song_list = api.get_suggestions(max_len=15)
+                cache_time = 20
+                next_offset = 0
+            else:
+                return
+
+            # Filter duplicate songs
+            seen = set()
+            seen_add = seen.add
+
+            def _seen_add(song):
+                if song in seen:
+                    return False
+                else:
+                    seen_add(song)
+                    return True
+
+            song_list = filter(_seen_add, song_list)
+
+            results = list(map(_get_inline_result_article, song_list))
+            bot.answerInlineQuery(update.inline_query.id, results, cache_time=cache_time, next_offset=next_offset)
+
+        return _handler
 
     @dispatcher.run_async
     def queue_command(self, bot, update):
