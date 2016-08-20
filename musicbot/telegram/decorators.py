@@ -1,4 +1,4 @@
-from musicbot.telegrambot.user import User
+from musicbot.telegram.user import User
 
 
 _options = None

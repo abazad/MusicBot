@@ -15,8 +15,8 @@ from telegram.ext.inlinequeryhandler import InlineQueryHandler
 from telegram.ext.messagehandler import MessageHandler, Filters
 
 from musicbot import music_apis
-from musicbot.telegrambot import decorators, notifier
-from musicbot.telegrambot.user import User
+from musicbot.telegram import decorators, notifier
+from musicbot.telegram.user import User
 
 
 def get_ip_address():

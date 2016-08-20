@@ -7,8 +7,7 @@ import colorama
 
 from musicbot import music_apis, player
 from musicbot.plugin_handler import PluginLoader
-from musicbot.telegrambot import decorators
-from musicbot.telegrambot import telegrambot
+from musicbot.telegram import bot, decorators
 
 
 # Initialize colorama for colored output
@@ -16,7 +15,7 @@ colorama.init()
 
 
 config_dir = "config"
-options = telegrambot.TelegramOptions(config_dir)
+options = bot.TelegramOptions(config_dir)
 decorators.init(options)
 
 
@@ -73,16 +72,15 @@ if config.get("auto_updates", False):
         else:
             print("No updates found.")
 
-gmusic_bot = telegrambot.TelegramBot(options, gmusic_token, plugins, gmusic_api, gmusic_api, queued_player)
+gmusic_bot = bot.TelegramBot(options, gmusic_token, plugins, gmusic_api, gmusic_api, queued_player)
 
 if youtube_token:
-    youtube_bot = telegrambot.TelegramBot(options, youtube_token, plugins, youtube_api, gmusic_api, queued_player)
+    youtube_bot = bot.TelegramBot(options, youtube_token, plugins, youtube_api, gmusic_api, queued_player)
 else:
     youtube_updater = True
 
 if soundcloud_token:
-    soundcloud_bot = telegrambot.TelegramBot(
-        options, soundcloud_token, plugins, soundcloud_api, gmusic_api, queued_player)
+    soundcloud_bot = bot.TelegramBot(options, soundcloud_token, plugins, soundcloud_api, gmusic_api, queued_player)
 else:
     soundcloud_updater = True
 

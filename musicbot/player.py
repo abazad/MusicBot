@@ -1,6 +1,6 @@
 import threading
 import time
-from musicbot.telegrambot.notifier import Notifier, Cause
+from musicbot.telegram.notifier import Notifier, Cause
 
 
 class SongQueue(list):
