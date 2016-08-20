@@ -1,4 +1,6 @@
+from datetime import datetime
 import json
+import logging
 import os
 import signal
 import sys
@@ -14,6 +16,33 @@ from musicbot.telegram import bot, decorators
 colorama.init()
 
 
+# Initialize logger
+os.makedirs("logs", exist_ok=True)
+
+logger = logging.getLogger("musicbot")
+logger.setLevel(logging.DEBUG)
+
+formatter = logging.Formatter("%(asctime)s (%(levelname)s, %(filename)s:%(lineno)s): %(message)s", datefmt="%H:%M:%S")
+
+file_handler = logging.FileHandler(datetime.utcnow().strftime("logs/%Y%m%d-%H%M%S.log"), encoding="utf-8", mode='w')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+info_handler = logging.StreamHandler(sys.stdout)
+info_handler.setLevel(logging.INFO)
+info_filter = logging.Filter()
+info_filter.filter = lambda record: record.levelno == logging.INFO
+info_handler.addFilter(info_filter)
+info_handler.setFormatter(formatter)
+logger.addHandler(info_handler)
+
+error_handler = logging.StreamHandler(sys.stderr)
+error_handler.setLevel(logging.ERROR)
+error_handler.setFormatter(formatter)
+logger.addHandler(error_handler)
+
+
+# Load config
 config_dir = "config"
 options = bot.TelegramOptions(config_dir)
 decorators.init(options)
@@ -62,15 +91,14 @@ queued_player = player.Player(gmusic_api)
 
 
 if config.get("auto_updates", False):
-    print("Checking for updates...")
+    logger.info("Checking for updates...")
     import updater
-    with open(os.devnull, 'w') as devnull:
-        if updater.update(output=devnull):
-            print("Restarting after update...")
-            os.execl(sys.executable, sys.executable, *sys.argv)
-            sys.exit(0)
-        else:
-            print("No updates found.")
+    if updater.update():
+        logger.info("Restarting after update...")
+        os.execl(sys.executable, sys.executable, *sys.argv)
+        sys.exit(0)
+    else:
+        logger.info("No updates found.")
 
 gmusic_bot = bot.TelegramBot(options, gmusic_token, plugins, gmusic_api, gmusic_api, queued_player)
 

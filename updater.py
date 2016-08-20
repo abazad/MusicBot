@@ -1,32 +1,35 @@
 import configparser
 import hashlib
 import json
+import logging
 import os
 import sys
 
 import requests
 
 
-def _go_through_files(cur_dir, data, repo_name, bw_list, is_whitelist, file=sys.stdout):
+def _go_through_files(cur_dir, data, repo_name, bw_list, is_whitelist, logger):
     updated = False
     for content in data:
         path = os.path.join(cur_dir, content['name'])
-        print(path, file=file)
+        logger.debug(path)
 
         # check if file is in the black/whitelist
         if (content["name"] in bw_list) != is_whitelist:
-            print("file found in blacklist/not found in whitelist", file=file)
+            logger.debug("file found in blacklist/not found in whitelist")
             continue
 
         # if there is a directory go through it per recursive call
         if(content["type"] == "dir"):
+            logger.debug("file is directory")
             os.makedirs(path, exist_ok=True)
             resp = requests.get(url=content['url'])
-            if _go_through_files(path, json.loads(resp.text), repo_name, bw_list, is_whitelist, file):
+            if _go_through_files(path, json.loads(resp.text), repo_name, bw_list, is_whitelist, logger):
                 updated = True
             continue
 
-        try:  # check if the file is there
+        try:
+            # check if the file is there
             # hash the current file
             with open(path, "r", encoding="utf-8") as f:
                 sha1 = hashlib.sha1()
@@ -48,15 +51,16 @@ def _go_through_files(cur_dir, data, repo_name, bw_list, is_whitelist, file=sys.
         # different
         if not hashoff or (hashon != hashoff):
             updated = True
-            print("difference found, updating", file=file)
+            logger.info("updating {}", path)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(resp.text)
         else:
-            print("no difference found", file=file)
+            logger.debug("no difference found")
     return updated
 
 
-def update(output=sys.stdout):
+def update(logger=None):
+    logger = logger or logging.getLogger("updater")
     config = configparser.ConfigParser()
     config.read_file(open('config/updater.settings'))
     repo_name = config.get("Section1", "repo")
@@ -66,7 +70,7 @@ def update(output=sys.stdout):
     resp = requests.get(url="https://api.github.com/repos/" + repo_name + "/contents")
     data = json.loads(resp.text)
     # check these files
-    return _go_through_files("", data, repo_name, bw_list, is_whitelist, output)
+    return _go_through_files("", data, repo_name, bw_list, is_whitelist, logger)
 
 
 def main():

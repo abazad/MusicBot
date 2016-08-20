@@ -1,3 +1,5 @@
+import logging
+
 from musicbot.telegram.user import User
 
 
@@ -64,6 +66,6 @@ def keyboard_answer_handler(func):
         if str.isdecimal(c):
             return func(int(c))
         else:
-            print("INVALID CHOICE:", c)
+            logging.getLogger("musicbot").debug("INVALID CHOICE:", c)
             return False
     return _handler

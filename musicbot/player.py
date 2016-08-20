@@ -1,5 +1,7 @@
+import logging
 import threading
 import time
+
 from musicbot.telegram.notifier import Notifier, Cause
 
 
@@ -14,11 +16,12 @@ class SongQueue(list):
         threading.Thread(name="prepare_thread", target=self._prepare_next).start()
 
     def _prepare_next(self):
+        logger = logging.getLogger("musicbot")
         while not self._stop_preparing:
             next_song = self._song_provider.get_suggestions(1)[0]
-            print("PREPARING", str(next_song))
+            logger.debug("PREPARING: %s", str(next_song))
             next_song.load()
-            print("FINISHED PREPARING", str(next_song))
+            logger.debug("FINISHED PREPARING: %s", str(next_song))
             self._prepare_event.wait()
             self._prepare_event.clear()
 
@@ -38,13 +41,14 @@ class SongQueue(list):
 
     def append(self, song):
         def _append():
-            print("LOADING APPENDED SONG")
+            logger = logging.getLogger("musicbot")
+            logger.debug("LOADING APPENDED SONG: %s", str(song))
             song.load()
             self._append_lock.acquire()
             if song not in self:
                 list.append(self, song)
             self._append_lock.release()
-            print("FINISHED LOADING APPENDED SONG")
+            logger.debug("FINISHED LOADING APPENDED SONG: %s", str(song))
             Notifier.notify(Cause.queue_add(song))
 
         threading.Thread(target=_append, name="append_thread").start()
@@ -91,9 +95,15 @@ class Player(object):
         self._queue.clear()
 
     def _on_song_end(self):
+        thread_name = threading.current_thread().name
+        logger = logging.getLogger("musicbot")
         if self._lock.acquire(blocking=False):
+            logger.debug("ENTERED _on_song_end (%s)", thread_name)
             song = self._queue.pop(0)
+            logger.debug("POPPED song: %s", str(song))
             if not song or self._stop:
+                logger.error("INVALID SONG POPPED OR STOP CALLED")
+                self._lock.release()
                 return
             fname = song.load()
 
@@ -106,7 +116,10 @@ class Player(object):
             Notifier.notify(Cause.current_song(song))
 
             time.sleep(1)
+            logger.debug("LEAVING _on_song_end (%s)", thread_name)
             self._lock.release()
+        else:
+            logger.debug("Failed to acquire _on_song_end lock (%s)", thread_name)
 
     def run(self):
         def _run():

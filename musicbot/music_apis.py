@@ -1,5 +1,6 @@
 import json
 import locale
+import logging
 import os
 import socket
 import threading
@@ -63,6 +64,7 @@ class Song(object):
             result = "{} - {}".format(self.artist, self.title)
         else:
             result = "Unknown"
+        self._str_rep = result
         return result
 
     def __hash__(self):
@@ -88,7 +90,7 @@ class AbstractAPI(object):
             if not os.path.isdir(songs_path):
                 os.makedirs(songs_path)
         except OSError:
-            raise ValueError("Invalid song path")
+            raise ValueError("Invalid song path: " + songs_path)
 
         self._config_dir = config_dir
         self._songs_path = songs_path
@@ -455,9 +457,10 @@ class GMusicAPI(AbstractSongProvider):
                 except CallFailure as e:
                     # Sometimes, the call returns a 403
                     attempts -= 1
-                    print("403, retrying... ({} attempts left)".format(attempts))
+                    logger = logging.getLogger("musicbot")
+                    logger.error("403, retrying... ({} attempts left)", attempts)
                     if not attempts:
-                        print(e)
+                        logger.exception(e)
                         raise IOError("Can't download song from Google Play")
 
                 request = urllib.request.Request(url)
@@ -482,7 +485,8 @@ class GMusicAPI(AbstractSongProvider):
                         gmusic_password = secrets["gmusic_password"]
                         gmusic_device_id = secrets.get("gmusic_device_id", None)
                     except KeyError as e:
-                        print("Missing GMusic secrets")
+                        logger = logging.getLogger("musicbot")
+                        logger.critial("Missing GMusic secrets")
                         raise e
 
                     missing_device_id = not gmusic_device_id
@@ -498,8 +502,9 @@ class GMusicAPI(AbstractSongProvider):
                     if missing_device_id:
                         devices = api.get_registered_devices()
                         api.logout()
-                        print("No device ID provided, printing registered devices:")
-                        print(json.dumps(devices, indent=4, sort_keys=True))
+                        logger = logging.getLogger("musicbot")
+                        logger.error("No device ID provided, printing registered devices:")
+                        logger.error(json.dumps(devices, indent=4, sort_keys=True))
                         raise KeyError("Missing device ID in secrets")
 
                     cls._api = api

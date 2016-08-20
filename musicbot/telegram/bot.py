@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import signal
 import socket
@@ -363,7 +364,7 @@ class TelegramBot(notifier.Subscribable):
             return
 
         song = self._music_api.lookup_song(song_id)
-        print("QUEUED by", user["first_name"], ":", song)
+        logging.getLogger("musicbot").info("QUEUED by %s: %s", user["first_name"], song)
         self._player.queue(song)
 
     # Admin commands

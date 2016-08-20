@@ -1,7 +1,9 @@
 import imp
+import logging
 import os
 
 from colorama import Fore
+
 
 plugin_dir = "./plugins"
 
@@ -11,6 +13,7 @@ class PluginLoader(object):
 
     # Load all Plugins present in the plugin_dir directory
     def load_plugins(self):
+        logger = logging.getLogger("musicbot")
         if not os.path.isdir(plugin_dir):
             return
         possible_plugins = os.listdir(plugin_dir)
@@ -28,10 +31,10 @@ class PluginLoader(object):
                 if ("get_label" in dir_list) and ("run_command" in dir_list):
                     self.plugins.append(module)
                 else:
-                    print((Fore.RED + "'{}' is not a valid plugin!" + Fore.RESET).format(filename))
+                    logger.error(Fore.RED + "'%s' is not a valid plugin!" + Fore.RESET, filename)
             except Exception as e:
-                print((Fore.RED + "{} error while loading plugin '{}': \n {}" + Fore.RESET)
-                      .format((type(e).__name__, filename, e)))
+                logger.error(Fore.RED + "%s error while loading plugin '%s': \n %s" + Fore.RESET,
+                             type(e).__name__, filename, e)
             finally:
                 module_info[0].close()
 

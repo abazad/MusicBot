@@ -4,3 +4,4 @@ songs/
 __pycache__/
 ids.json
 plugins/
+logs/
