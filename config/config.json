@@ -1,6 +1,6 @@
 {
     "auto_updates": 0,
-    "enable_session_password": false,
+    "enable_session_password": 0,
     "gmusic_locale": 0,
     "load_plugins": 1,
     "max_conversions": 1,
