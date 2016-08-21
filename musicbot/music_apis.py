@@ -263,6 +263,8 @@ class GMusicAPI(AbstractSongProvider):
             return self._song_from_info(info)
 
     def search_song(self, query, max_fetch=100):
+        if not query:
+            raise ValueError("query is None")
         max_fetch = min(100, max_fetch)
         results = self._api.search(query, max_fetch)
         _song_from_info = self._song_from_info
@@ -543,6 +545,8 @@ class YouTubeAPI(AbstractAPI):
             return song
 
     def search_song(self, query, max_fetch=50):
+        if not query:
+            raise ValueError("query is None")
         max_fetch = min(50, max_fetch)
         qs = {
             'q': query,
@@ -608,6 +612,8 @@ class SoundCloudAPI(AbstractAPI):
             return self._song_from_info(info)
 
     def search_song(self, query, max_fetch=200):
+        if not query:
+            raise ValueError("query is None")
         max_fetch = min(50, max_fetch)
         resource = self._client.get("tracks/", q=query, limit=max_fetch, linked_partitioning=1)
         _info_to_song = self._song_from_info
@@ -618,6 +624,8 @@ class SoundCloudAPI(AbstractAPI):
 
             try:
                 next_href = resource.next_href
+                if not next_href:
+                    break
                 resource = self._client.get(next_href)
             except AttributeError:
                 break
