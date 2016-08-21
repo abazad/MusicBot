@@ -69,3 +69,15 @@ def keyboard_answer_handler(func):
             logging.getLogger("musicbot").debug("INVALID CHOICE:", c)
             return False
     return _handler
+
+
+def callback_keyboard_answer_handler(func):
+    def _handler(bot, update):
+        query = update.callback_query
+        chat_id = query.message.chat.id
+        data = query.data
+        if not data:
+            logging.getLogger("musicbot").debug("missing data for callback query")
+            return True
+        return func(chat_id, data)
+    return _handler

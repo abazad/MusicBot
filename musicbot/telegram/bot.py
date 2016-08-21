@@ -7,14 +7,19 @@ from threading import Thread
 import time
 
 from pylru import lrucache
-from telegram import replykeyboardmarkup, replykeyboardhide, inlinequeryresultarticle
 import telegram
 from telegram.ext import dispatcher
 from telegram.ext import updater
+from telegram.ext.callbackqueryhandler import CallbackQueryHandler
 from telegram.ext.choseninlineresulthandler import ChosenInlineResultHandler
 from telegram.ext.commandhandler import CommandHandler
 from telegram.ext.inlinequeryhandler import InlineQueryHandler
 from telegram.ext.messagehandler import MessageHandler, Filters
+from telegram.inlinekeyboardbutton import InlineKeyboardButton
+from telegram.inlinekeyboardmarkup import InlineKeyboardMarkup
+from telegram.inlinequeryresultarticle import InlineQueryResultArticle
+from telegram.replykeyboardhide import ReplyKeyboardHide
+from telegram.replykeyboardmarkup import ReplyKeyboardMarkup
 
 from musicbot import music_apis
 from musicbot.telegram import decorators, notifier
@@ -78,13 +83,16 @@ class TelegramBot(notifier.Subscribable):
         self._song_provider = song_provider
         self._player = player
         self._sent_keyboard = {}
+        self._sent_keyboard_message_ids = {}
         self._updater = updater.Updater(token=token)
         _dispatcher = self._updater.dispatcher
         self._register_commands(_dispatcher, plugins)
         self._updater.start_polling()
 
     def _register_commands(self, _dispatcher, plugins):
+        # keyboard answer handlers
         _dispatcher.add_handler(MessageHandler([Filters.text], self.handle_message))
+        _dispatcher.add_handler(CallbackQueryHandler(self.handle_callback_query))
 
         # public commands
         _dispatcher.add_handler(CommandHandler('start', self.start_command))
@@ -127,22 +135,45 @@ class TelegramBot(notifier.Subscribable):
         for item in items:
             keyboard.append([item])
 
-        markup = replykeyboardmarkup.ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
 
         bot.send_message(chat_id=chat_id, text=text, reply_markup=markup)
 
         if action:
             self._sent_keyboard[chat_id] = action
 
-    def hide_keyboard(self, bot, chat_id, message):
-        markup = replykeyboardhide.ReplyKeyboardHide()
-        bot.send_message(chat_id=chat_id, text=message, reply_markup=markup, parse_mode="markdown")
+    def send_callback_keyboard(self, bot, chat_id, text, buttons, action=None):
+        keyboard = []
+        for button in buttons:
+            keyboard.append([button])
+
+        markup = InlineKeyboardMarkup(keyboard)
+
+        try:
+            message_id = self._sent_keyboard_message_ids[chat_id]
+            message = bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
+        except KeyError:
+            message = bot.send_message(chat_id=chat_id, text=text, reply_markup=markup)
+
+        self._sent_keyboard_message_ids[chat_id] = message.message_id
+
+        if action:
+            self._sent_keyboard[chat_id] = action
+
+    def hide_keyboard(self, bot, chat_id, message="kk...", parse_mode="markdown"):
+        try:
+            message_id = self._sent_keyboard_message_ids[chat_id]
+            bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=message, parse_mode=parse_mode)
+            del self._sent_keyboard_message_ids[chat_id]
+        except KeyError:
+            markup = ReplyKeyboardHide()
+            bot.send_message(chat_id=chat_id, text=message, reply_markup=markup, parse_mode=parse_mode)
 
     def cancel_command(self, bot, update):
         chat_id = update.message.chat_id
         if chat_id in self._sent_keyboard:
             del self._sent_keyboard[chat_id]
-        self.hide_keyboard(bot, chat_id, "kk...")
+        self.hide_keyboard(bot, chat_id)
 
     def handle_message(self, bot, update):
         chat_id = update.message.chat_id
@@ -150,6 +181,24 @@ class TelegramBot(notifier.Subscribable):
             action = self._sent_keyboard[chat_id]
             if action(bot, update):
                 del self._sent_keyboard[chat_id]
+
+    def handle_callback_query(self, bot, update):
+        query = update.callback_query
+        chat_id = query.message.chat.id
+
+        try:
+            action = self._sent_keyboard[chat_id]
+        except KeyError:
+            # Nothing to do
+            return
+
+        try:
+            if query.message.message_id == self._sent_keyboard_message_ids[chat_id]:
+                if action and action(bot, update):
+                    del self._sent_keyboard[chat_id]
+                    del self._sent_keyboard_message_ids[chat_id]
+        except KeyError:
+            pass
 
     def is_logged_in(self, telegram_user):
         user = User(user=telegram_user)
@@ -169,11 +218,9 @@ class TelegramBot(notifier.Subscribable):
         return message
 
     def get_queue_keyboard_items(self):
-        keyboard_items = []
         queue = self._player.get_queue()
-        for i in range(0, len(queue)):
-            keyboard_items.append("{}) {}".format(i + 1, queue[i]))
-        return keyboard_items
+        for song in queue:
+            yield InlineKeyboardButton(text=str(song), callback_data=song.song_id)
 
     def start_command(self, bot, update):
         if not self.is_logged_in(update.message.from_user):
@@ -244,15 +291,14 @@ class TelegramBot(notifier.Subscribable):
             bot.send_message(chat_id=chat_id, text="No songs in queue")
             return
 
-        @decorators.keyboard_answer_handler
-        def _action(queue_position):
-            queue_position -= 1
-            player.skip_song(queue_position)
+        @decorators.callback_keyboard_answer_handler
+        def _action(chat_id, data):
+            player.skip_song(self._music_api.lookup_song(data))
             self.hide_keyboard(bot, chat_id, self.get_queue_message())
             return True
 
         keyboard_items = self.get_queue_keyboard_items()
-        self.send_keyboard(bot, chat_id, "What song?", keyboard_items, _action)
+        self.send_callback_keyboard(bot, chat_id, "What song?", keyboard_items, _action)
 
     @dispatcher.run_async
     @decorators.password_protected_command
@@ -265,25 +311,27 @@ class TelegramBot(notifier.Subscribable):
             bot.send_message(chat_id=chat_id, text="Not >1 songs in queue")
             return
 
-        @decorators.keyboard_answer_handler
-        def _first_action(source_position):
-            source_position -= 1
-            source = queue[source_position]
-            queue.pop(source_position)
-            keyboard_items = self.get_queue_keyboard_items()
+        @decorators.callback_keyboard_answer_handler
+        def _first_action(chat_id, data):
+            source = self._music_api.lookup_song(data)
+            try:
+                queue.remove(source)
+                keyboard_items = self.get_queue_keyboard_items()
+            except ValueError:
+                return True
 
-            @decorators.keyboard_answer_handler
-            def _second_action(target_position):
-                target_position -= 1
-                queue.insert(target_position, source)
+            @decorators.callback_keyboard_answer_handler
+            def _second_action(chat_id, data):
+                index = queue.index(self._music_api.lookup_song(data))
+                queue.insert(index, source)
                 self.hide_keyboard(bot, chat_id, self.get_queue_message())
                 return True
 
-            self.send_keyboard(bot, chat_id, "Before what song should it be?", keyboard_items, _second_action)
+            self.send_callback_keyboard(bot, chat_id, "Before what song should it be?", keyboard_items, _second_action)
             return False
 
         keyboard_items = self.get_queue_keyboard_items()
-        self.send_keyboard(bot, chat_id, "What song do you want to move?", keyboard_items, _first_action)
+        self.send_callback_keyboard(bot, chat_id, "What song do you want to move?", keyboard_items, _first_action)
 
     @decorators.password_protected_command
     def play_command(self, bot, update):
@@ -315,7 +363,7 @@ class TelegramBot(notifier.Subscribable):
                 title = str_rep
                 description = ""
 
-            result = inlinequeryresultarticle.InlineQueryResultArticle(
+            result = InlineQueryResultArticle(
                 id=song.song_id,
                 title=title,
                 description=description,
@@ -478,16 +526,17 @@ class TelegramBot(notifier.Subscribable):
             return
 
         text = "Who should be banned?"
-        keyboard_items = list(map(lambda client: "{}) {}".format(client.user_id, client.name), self._options.clients))
+        keyboard_items = list(
+            map(lambda client: InlineKeyboardButton(text=client.name, callback_data=client.user_id), self._options.clients))
 
-        @decorators.keyboard_answer_handler
-        def _action(ban_id):
-            options.clients = set(filter(lambda client: client.user_id != ban_id, options.clients))
+        @decorators.callback_keyboard_answer_handler
+        def _action(chat_id, data):
+            options.clients = set(filter(lambda client: client.user_id != data, options.clients))
             options.password = None
             self.hide_keyboard(bot, chat_id, "Banned user. Please set a new password.")
             return True
 
-        self.send_keyboard(bot, chat_id, text, keyboard_items, _action)
+        self.send_callback_keyboard(bot, chat_id, text, keyboard_items, _action)
 
     @decorators.admin_command
     def set_quality_command(self, bot, update):
@@ -524,13 +573,9 @@ class TelegramBot(notifier.Subscribable):
             bot.send_message(chat_id=chat_id, text="The playlist is empty.")
             return
 
-        def _action(bot, update):
-            text = update.message.text
-            if "|" not in text:
-                return False
-
-            song_id = text.split("|")[1].strip()
-            song = api.lookup_song(song_id)
+        @decorators.callback_keyboard_answer_handler
+        def _action(chat_id, data):
+            song = api.lookup_song(data)
 
             if song not in playlist:
                 bot.send_message(chat_id=chat_id, text="That song is not in the BotPlaylist")
@@ -540,9 +585,10 @@ class TelegramBot(notifier.Subscribable):
             self.hide_keyboard(bot, chat_id, "Removed from playlist: " + str(song))
             return True
 
-        keyboard_items = list(map(lambda song: "{} | {}".format(song, song.song_id), sorted(playlist)))
+        keyboard_items = map(lambda song: InlineKeyboardButton(
+            str(song), callback_data=song.song_id), sorted(playlist))
 
-        self.send_keyboard(bot, chat_id, "What song should be removed?", keyboard_items, _action)
+        self.send_callback_keyboard(bot, chat_id, "What song should be removed?", keyboard_items, _action)
 
     @decorators.admin_command
     def station_reload_command(self, bot, update):

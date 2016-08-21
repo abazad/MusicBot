@@ -73,8 +73,8 @@ class Player(object):
     def get_queue(self):
         return self._queue
 
-    def skip_song(self, queue_position):
-        song = self._queue.pop(queue_position)
+    def skip_song(self, song):
+        self._queue.remove(song)
         Notifier.notify(Cause.queue_remove(song))
 
     def pause(self):
