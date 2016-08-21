@@ -568,7 +568,8 @@ class YouTubeAPI(AbstractAPI):
             return Song(song_id, self._get_loader(song_id), albumArtUrl=url, str_rep=title)
 
         songs = self._pafy.call_gdata('search', qs)['items']
-        return list(map(_track_to_song, songs))
+        for track in songs:
+            yield _track_to_song(track)
 
     def _get_loader(self, song_id):
         audio = None
