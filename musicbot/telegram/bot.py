@@ -226,10 +226,14 @@ class TelegramBot(notifier.Subscribable):
             yield InlineKeyboardButton(text=str(song), callback_data=song.song_id)
 
     def start_command(self, bot, update):
+        chat_id = update.message.chat_id
         if not self.is_logged_in(update.message.from_user):
-            bot.send_message(chat_id=update.message.chat_id, text="Please log in with /login [password]")
+            bot.send_message(chat_id=chat_id,
+                             text="Please log in with /login [password].\nYou can long press /login to not send it immediately.")
             return
-        bot.send_message(text="Type @gmusicqueuebot and search for a song", chat_id=update.message.chat_id)
+
+        text = "Type {} and search for a song.".format(bot.name)
+        bot.send_message(chat_id=chat_id, text=text)
 
     def login_command(self, bot, update):
         chat_id = update.message.chat_id
