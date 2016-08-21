@@ -185,20 +185,23 @@ class TelegramBot(notifier.Subscribable):
     def handle_callback_query(self, bot, update):
         query = update.callback_query
         chat_id = query.message.chat.id
+        message_id = query.message.message_id
 
         try:
             action = self._sent_keyboard[chat_id]
         except KeyError:
-            # Nothing to do
+            logging.getLogger("musicbot").debug("Found no action for callback query")
+            bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="error")
             return
 
         try:
-            if query.message.message_id == self._sent_keyboard_message_ids[chat_id]:
+            if message_id == self._sent_keyboard_message_ids[chat_id]:
                 if action and action(bot, update):
                     del self._sent_keyboard[chat_id]
                     del self._sent_keyboard_message_ids[chat_id]
         except KeyError:
-            pass
+            logging.getLogger("musicbot").debug("Received query for unknown message id")
+            bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="error")
 
     def is_logged_in(self, telegram_user):
         user = User(user=telegram_user)
