@@ -1,4 +1,6 @@
 from enum import Enum
+from telegram.inlinekeyboardbutton import InlineKeyboardButton
+from musicbot.telegram import decorators
 
 
 class _Subscriber(object):
@@ -24,24 +26,21 @@ class Subscribable(object):
     def subscribe(self, bot, update):
         chat_id = update.message.chat_id
 
-        if _Subscriber(chat_id, bot) in Notifier._subscribers:
-            bot.send_message(chat_id=chat_id, text="Already subscribed.")
-            return
-
-        def _action(bot, update):
-            text = update.message.text.lower()
-            if "y" in text:
-                silent = False
-            else:
-                silent = True
-
+        @decorators.callback_keyboard_answer_handler
+        def _action(chat_id, data):
+            silent = data == "n"
             subscriber = _Subscriber(chat_id, bot, silent)
+            try:
+                Notifier._subscribers.remove(subscriber)
+            except KeyError:
+                pass
             Notifier._subscribers.add(subscriber)
             self.hide_keyboard(bot, chat_id, "Subscribed.")
             return True
 
-        keyboard_items = ["Yes", "No"]
-        self.send_keyboard(bot, chat_id, "Do you want to receive notifications?", keyboard_items, _action)
+        keyboard_items = [InlineKeyboardButton(text="Yes", callback_data="y"),
+                          InlineKeyboardButton(text="No", callback_data="n")]
+        self.send_callback_keyboard(bot, chat_id, "Do you want to receive notifications?", keyboard_items, _action)
 
     def unsubscribe(self, bot, update):
         chat_id = update.message.chat_id
