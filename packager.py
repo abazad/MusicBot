@@ -23,8 +23,8 @@ def _create_package(source_path=".", target_dir=".", branch="unknown", snapshot=
     else:
         snapshot = ""
 
-    package_fname = "TelegramMusicBot-{version}-{branch}{snapshot}.zip".format(
-        version=main.__version__, branch=branch, snapshot=snapshot)
+    package_fname = os.path.join(
+        target_dir, "TelegramMusicBot-{version}-{branch}{snapshot}.zip".format(version=main.__version__, branch=branch, snapshot=snapshot))
 
     files = os.listdir(source_path)
     try:
