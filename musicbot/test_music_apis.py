@@ -117,6 +117,20 @@ class TestGMusicAPI(unittest.TestCase, APITest, SongProviderTest):
             os.remove(os.path.join("songs", file))
         os.rmdir("songs")
 
+    def test_set_quality(self):
+        api = self.api
+        api.set_quality("hi")
+        api.set_quality("med")
+        api.set_quality("low")
+        with self.assertRaises(ValueError):
+            api.set_quality("test")
+        with self.assertRaises(ValueError):
+            api.set_quality("")
+        with self.assertRaises(ValueError):
+            api.set_quality(" ")
+        with self.assertRaises(ValueError):
+            api.set_quality(None)
+
 
 class TestYoutubeAPI(unittest.TestCase, APITest):
 
