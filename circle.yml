@@ -11,4 +11,4 @@ dependencies:
     
 tests:
   post:
-    - rm config/secrets.json
+    - python post_tests.py
