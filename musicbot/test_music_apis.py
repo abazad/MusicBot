@@ -68,6 +68,13 @@ class APITest(object):
         with self.assertRaises(ValueError):
             self.api.lookup_song(None)
 
+    def test_valid_loader(self):
+        search_results = self.api.search_song("ok go")
+        self.assertTrue(search_results)
+        song = search_results.__next__()
+        fname = song.load()
+        self.assertTrue(os.path.isfile(fname))
+
 
 class SongProviderTest(object):
 
