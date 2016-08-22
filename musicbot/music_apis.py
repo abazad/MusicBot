@@ -273,6 +273,8 @@ class GMusicAPI(AbstractSongProvider):
             yield _song_from_info(info)
 
     def set_quality(self, quality):
+        if not quality:
+            raise ValueError("quality is None")
         quality = quality.strip()
         if quality not in ["hi", "med", "low"]:
             raise ValueError("Quality must be hi, mid or low")
