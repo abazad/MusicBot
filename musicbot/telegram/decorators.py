@@ -3,58 +3,62 @@ import logging
 from musicbot.telegram.user import User
 
 
-_options = None
-
-
-def init(options):
-    global _options
-    if _options:
-        raise ValueError("Already initialized")
-    _options = options
+def plugin_command(func):
+    def _command(self, *args):
+        return func(*args)
+    return _command
 
 
 def admin_command(func):
-    def _admin_func(*args):
-        if len(args) == 3:
-            # Ignore self argument
-            i = 1
-        else:
-            i = 0
-
-        bot = args[i]
-        update = args[i + 1]
-
-        if _options.admin_chat_id == update.message.chat_id:
-            return func(*args)
+    def _command(self, bot, update):
+        if self._options.admin_chat_id == update.message.chat_id:
+            return func(self, bot, update)
         else:
             bot.send_message(chat_id=update.message.chat_id, text="This command is for admins only")
             return None
-    return _admin_func
+    return _command
 
 
 def password_protected_command(func):
-    def _password_protected_func(*args):
-        if len(args) == 3:
-            # Ignore self argument
-            i = 1
-        else:
-            i = 0
-
-        bot = args[i]
-        update = args[i + 1]
-
+    def _command(self, bot, update):
+        options = self._options
         chat_id = update.message.chat_id
-        if _options.enable_password and not _options.password:
+        if options.enable_password and not options.password:
             bot.send_message(chat_id=chat_id, text="Admin hasn't decided which password to use yet")
             return None
         user = User(user=update.message.from_user)
-        if (not _options.enable_password) or (user in _options.clients):
-            return func(*args)
+        if (not options.enable_password) or (user in options.clients):
+            return func(self, bot, update)
         else:
             bot.send_message(chat_id=chat_id, text="Please log in with /login [password]")
             return None
 
-    return _password_protected_func
+    return _command
+
+
+def queue_action_command(question="What song?", min_len=1):
+    def _decorator(func):
+        def _command(self, bot, update):
+            chat_id = update.message.chat_id
+            player = self._player
+            # Clone the queue
+            queue = list(player.get_queue())
+
+            if len(queue) < min_len:
+                bot.send_message(chat_id=chat_id, text="Not enough songs in queue")
+                return
+
+            queue_songs = {song.song_id: song for song in queue}
+
+            @callback_keyboard_answer_handler
+            def _action(chat_id, data):
+                song = queue_songs[data]
+                return func(self, chat_id, song)
+
+            keyboard_items = self.get_queue_keyboard_items(queue)
+            self.send_callback_keyboard(bot, chat_id, question, keyboard_items, _action)
+        return _command
+    return _decorator
 
 
 def keyboard_answer_handler(func):

@@ -46,7 +46,6 @@ def main():
     # Load config
     config_dir = "config"
     options = bot.TelegramOptions(config_dir)
-    decorators.init(options)
 
     if options.load_plugins:
         # Load additional Commands
