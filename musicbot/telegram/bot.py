@@ -298,7 +298,7 @@ class TelegramBot(notifier.Subscribable):
 
     @dispatcher.run_async
     @decorators.password_protected_command
-    @decorators.queue_action_command()
+    @decorators.queue_action_command(question="What song do you want to skip?")
     def skip_command(self, chat_id, song):
         self._player.skip_song(song)
         return self.get_queue_message()
