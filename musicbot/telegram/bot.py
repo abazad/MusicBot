@@ -309,10 +309,11 @@ class TelegramBot(notifier.Subscribable):
         @decorators.queue_action_command("What song do you want to move?", 2)
         def _first_action(self, chat_id, source):
             queue = self._player.get_queue()
-            queue.remove(source)
+            filtered_queue = filter(lambda song: song != source, queue)
 
-            @decorators.queue_action_command("Before what song should it be?", 1)
+            @decorators.queue_action_command("Before what song should it be?", 1, filtered_queue)
             def _second_action(self, chat_id, target):
+                queue.remove(source)
                 index = queue.index(target)
                 queue.insert(index, source)
                 return self.get_queue_message()

@@ -36,13 +36,15 @@ def password_protected_command(func):
     return _command
 
 
-def queue_action_command(question="What song?", min_len=1):
+def queue_action_command(question="What song?", min_len=1, song_queue=None):
     def _decorator(func):
         def _command(self, bot, update):
+
             chat_id = update.message.chat_id
             player = self._player
+            queue = song_queue or player.get_queue()
             # Clone the queue
-            queue = list(player.get_queue())
+            queue = list(queue)
 
             if len(queue) < min_len:
                 bot.send_message(chat_id=chat_id, text="Not enough songs in queue")
