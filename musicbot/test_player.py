@@ -1,10 +1,9 @@
-import json
 import os
 import time
 import unittest
 
-from musicbot.music_apis import Song, AbstractSongProvider, GMusicAPI
-from musicbot.player import SongQueue, Player
+from musicbot.music_apis import Song, AbstractSongProvider
+from musicbot.player import SongQueue
 
 
 class TestSongProvider(AbstractSongProvider):
@@ -78,56 +77,6 @@ class TestSongQueue(unittest.TestCase):
         time.sleep(0.5)
         self.assertTrue(len(list(filter(lambda song: song == song, self.queue))) == 1)
 
-
-class TestPlayer(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        config_dir = "config"
-        with open(os.path.join(config_dir, "config.json"), 'r') as config:
-            config = json.loads(config.read())
-        with open(os.path.join(config['secrets_location'], "secrets.json"), 'r') as secrets:
-            secrets = json.loads(secrets.read())
-        api = GMusicAPI(config_dir, config, secrets)
-        cls.api = api
-        api.add_played(api.get_song())
-        api.reload()
-        cls.player = Player(api)
-        cls.player.run()
-        with cls.player._lock:
-            pass
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.player.close()
-        cls.api.reset()
-        time.sleep(0.5)
-        for file in os.listdir("songs"):
-            os.remove(os.path.join("songs", file))
-        os.rmdir("songs")
-
-    def test_skip_song(self):
-        song = self.api.get_song()
-        self.player.queue(song)
-        while(song not in self.player.get_queue()):
-            time.sleep(0.2)
-        self.player.skip_song(song)
-        self.assertNotIn(song, self.player.get_queue())
-
-    def test_next(self):
-        player = self.player
-        while(not player.get_current_song()):
-            time.sleep(0.2)
-        current_song = player.get_current_song()
-        self.assertTrue(current_song)
-        player.next()
-
-        attempts = 30
-        while current_song == player.get_current_song() and attempts:
-            time.sleep(0.2)
-            attempts -= 1
-
-        self.assertNotEqual(current_song, player.get_current_song())
 
 if __name__ == "__main__":
     os.chdir("..")
