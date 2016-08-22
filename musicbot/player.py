@@ -53,17 +53,20 @@ class SongQueue(list):
 
         threading.Thread(target=_append, name="append_thread").start()
 
+    def close(self):
+        self._stop_preparing = True
+        self._prepare_event.set()
+
 
 class Player(object):
 
-    def __init__(self, api):
+    def __init__(self, song_provider):
         import simpleaudio
         self._sa = simpleaudio
         self._player = None
         self._stop = False
         self._pause = False
-        self._api = api
-        self._queue = SongQueue(api)
+        self._queue = SongQueue(song_provider)
         self._current_song = None
         self._lock = threading.Lock()
 
@@ -135,3 +138,4 @@ class Player(object):
         self._stop = True
         if self._player:
             self._player.stop()
+        self._queue.close()
