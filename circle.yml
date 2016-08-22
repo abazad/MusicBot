@@ -17,10 +17,10 @@ deployment:
   snapshot:
     branch: /.*/
     commands:
-      - python packager.py --branch
+      - python packager.py
 
   release:
     tag: /.*/
     owner: BjoernPetersen
     commands:
-      - python packager.py --tag
+      - python packager.py
