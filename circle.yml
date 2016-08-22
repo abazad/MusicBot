@@ -9,6 +9,6 @@ dependencies:
   post:
     - python prep_tests.py
     
-tests:
+test:
   post:
     - python post_tests.py
