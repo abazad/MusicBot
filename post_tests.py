@@ -15,7 +15,7 @@ def restore_blank_secrets():
         secrets[key] = ""
 
     with open("config/secrets.json", 'w') as secrets_file:
-        secrets_file.write(json.dumps(secrets))
+        secrets_file.write(json.dumps(secrets, indent=4, sort_keys=True))
 
 
 if __name__ == '__main__':
