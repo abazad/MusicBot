@@ -23,7 +23,6 @@ from telegram.replykeyboardmarkup import ReplyKeyboardMarkup
 
 from musicbot import music_apis
 from musicbot.telegram import decorators, notifier
-from musicbot.telegram.decorators import plugin_command
 from musicbot.telegram.user import User
 
 
