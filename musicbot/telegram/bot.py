@@ -136,6 +136,8 @@ class TelegramBot(notifier.Subscribable):
         for item in items:
             keyboard.append([item])
 
+        keyboard.append(["/cancel"])
+
         markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
 
         bot.send_message(chat_id=chat_id, text=text, reply_markup=markup)
@@ -147,6 +149,7 @@ class TelegramBot(notifier.Subscribable):
         keyboard = []
         for button in buttons:
             keyboard.append([button])
+        keyboard.append([InlineKeyboardButton("cancel", callback_data="null")])
 
         markup = InlineKeyboardMarkup(keyboard)
 
@@ -161,10 +164,10 @@ class TelegramBot(notifier.Subscribable):
         if action:
             self._sent_keyboard[chat_id] = action
 
-    def hide_keyboard(self, bot, chat_id, message="kk...", parse_mode="markdown"):
+    def hide_keyboard(self, bot, chat_id, message="kk...", parse_mode="markdown", message_id=None):
         try:
-            message_id = self._sent_keyboard_message_ids[chat_id]
-            bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=message, parse_mode=parse_mode)
+            old_message_id = message_id or self._sent_keyboard_message_ids[chat_id]
+            bot.edit_message_text(chat_id=chat_id, message_id=old_message_id, text=message, parse_mode=parse_mode)
         except KeyError:
             markup = ReplyKeyboardHide()
             bot.send_message(chat_id=chat_id, text=message, reply_markup=markup, parse_mode=parse_mode)
@@ -190,6 +193,22 @@ class TelegramBot(notifier.Subscribable):
         query = update.callback_query
         chat_id = query.message.chat.id
         message_id = query.message.message_id
+        data = query.data
+
+        if not data:
+            logging.getLogger("musicbot").debug("missing data for callback query")
+            self.hide_keyboard(bot, chat_id, message_id=message_id)
+            return
+
+        if data == "null":
+            self.hide_keyboard(bot, chat_id, message_id=message_id)
+            try:
+                sent_keyboard_message_ids = self._sent_keyboard_message_ids
+                if sent_keyboard_message_ids[chat_id] == message_id:
+                    del sent_keyboard_message_ids[chat_id]
+            except KeyError:
+                pass
+            return
 
         try:
             action = self._sent_keyboard[chat_id]
