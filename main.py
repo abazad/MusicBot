@@ -9,7 +9,9 @@ import colorama
 
 from musicbot import music_apis, player
 from musicbot.plugin_handler import PluginLoader
-from musicbot.telegram import bot, decorators
+from musicbot.telegram import bot
+
+__version__ = 0.4
 
 
 def main():
