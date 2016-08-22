@@ -3,7 +3,6 @@ import hashlib
 import json
 import logging
 import os
-import sys
 
 import requests
 
@@ -73,9 +72,5 @@ def update(logger=None):
     return _go_through_files("", data, repo_name, bw_list, is_whitelist, logger)
 
 
-def main():
-    update()
-
-
 if __name__ == '__main__':
-    main()
+    update()
