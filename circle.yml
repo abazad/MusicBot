@@ -8,3 +8,7 @@ dependencies:
     
   post:
     - python prep_tests.py
+    
+tests:
+  post:
+    - rm config/secrets.json
