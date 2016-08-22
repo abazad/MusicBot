@@ -35,8 +35,7 @@ class Subscribable(object):
             except KeyError:
                 pass
             Notifier._subscribers.add(subscriber)
-            self.hide_keyboard(bot, chat_id, "Subscribed.")
-            return True
+            return "Subscribed."
 
         keyboard_items = [InlineKeyboardButton(text="Yes", callback_data="y"),
                           InlineKeyboardButton(text="No", callback_data="n")]
