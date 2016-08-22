@@ -536,11 +536,11 @@ class TelegramBot(notifier.Subscribable):
 
         text = "Who should be banned?"
         keyboard_items = list(
-            map(lambda client: InlineKeyboardButton(text=client.name, callback_data=client.user_id), self._options.clients))
+            map(lambda client: InlineKeyboardButton(text=client.name, callback_data=str(client.user_id)), self._options.clients))
 
         @decorators.callback_keyboard_answer_handler
         def _action(chat_id, data):
-            options.clients = set(filter(lambda client: client.user_id != data, options.clients))
+            options.clients = set(filter(lambda client: str(client.user_id) != data, options.clients))
             options.password = None
             return "Banned user. Please set a new password."
 
