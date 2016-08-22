@@ -11,7 +11,7 @@ from musicbot import music_apis, player
 from musicbot.plugin_handler import PluginLoader
 from musicbot.telegram import bot
 
-__version__ = 0.4
+__version__ = 0.5
 
 
 def main():
