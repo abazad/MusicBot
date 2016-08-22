@@ -12,3 +12,15 @@ dependencies:
 test:
   post:
     - python post_tests.py
+    
+deployment:
+  snapshot:
+    branch: /.*/
+    commands:
+      - python packager.py --branch
+
+  release:
+    tag: /.*/
+    owner: BjoernPetersen
+    commands:
+      - python packager.py --tag
