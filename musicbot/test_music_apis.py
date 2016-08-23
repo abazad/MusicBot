@@ -4,46 +4,51 @@ import logging
 import os
 import unittest
 
-from musicbot.music_apis import Song, GMusicAPI, YouTubeAPI, SoundCloudAPI
+from musicbot.music_apis import Song, GMusicAPI, YouTubeAPI, SoundCloudAPI, AbstractAPI
 import test_logger
 
 
 class TestSong(unittest.TestCase):
 
-    def _loader(self):
-        return "test.wav"
+    class _TestAPI(AbstractAPI):
+
+        def __init__(self):
+            pass
+
+        def load_song(self, song):
+            return "test.wav"
 
     def _create_test_songs(self):
-        loader = self._loader
-        return [Song("testid", loader),
-                Song("testid", loader, "testartist", "testtitle"),
-                Song("testid", loader, str_rep="testrep"),
-                Song("testid", loader, "testartist", "testtitle", str_rep="testrep"),
-                Song("testid", loader, "testartist", "testtitle", albumArtUrl="testurl"),
-                Song("testid", loader, str_rep="testrep", albumArtUrl="testurl"),
-                Song("testid", loader, "testartist", "testtitle", str_rep="testrep", albumArtUrl="testurl")]
+        api = TestSong._TestAPI()
+        return [Song("testid", api),
+                Song("testid", api, "testartist", "testtitle"),
+                Song("testid", api, str_rep="testrep"),
+                Song("testid", api, "testartist", "testtitle", str_rep="testrep"),
+                Song("testid", api, "testartist", "testtitle", albumArtUrl="testurl"),
+                Song("testid", api, str_rep="testrep", albumArtUrl="testurl"),
+                Song("testid", api, "testartist", "testtitle", str_rep="testrep", albumArtUrl="testurl")]
 
     def test_init_missing_required(self):
         with self.assertRaises(ValueError):
-            Song(None, self._loader)
+            Song(None, TestSong._TestAPI())
         with self.assertRaises(ValueError):
             Song("testid", None)
 
     def test_init_invalid_values(self):
         with self.assertRaises(ValueError):
-            Song("testid", self._loader, "testartist")
+            Song("testid", TestSong._TestAPI(), "testartist")
         with self.assertRaises(ValueError):
-            Song("testid", self._loader, None, "testtitle")
+            Song("testid", TestSong._TestAPI(), None, "testtitle")
 
     def test_init_valid(self):
         self._create_test_songs()
 
     def test_load(self):
-        song = Song("testid", self._loader)
+        song = Song("testid", TestSong._TestAPI())
         self.assertEqual("test.wav", song.load())
 
     def test_song_id(self):
-        song = Song("testid", self._loader)
+        song = Song("testid", TestSong._TestAPI())
         self.assertEqual("testid", song.song_id)
 
     # Make sure str returns something and doesn't throw errors

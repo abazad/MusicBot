@@ -12,9 +12,12 @@ class TestSongProvider(AbstractSongProvider):
         self._loader = loader
         self.counter = 0
 
+    def load_song(self, song):
+        return self._loader(song.song_id)()
+
     def get_song(self):
         song_id = "test" + str(self.counter)
-        song = Song(song_id, self._loader(song_id))
+        song = Song(song_id, self)
         self.counter += 1
         return song
 
@@ -22,7 +25,7 @@ class TestSongProvider(AbstractSongProvider):
         songs = []
         for i in range(0, max_len):
             song_id = "test" + str(i + self.counter)
-            song = Song(song_id, self._loader(song_id))
+            song = Song(song_id, self)
             songs.append(song)
         return songs
 
@@ -46,7 +49,7 @@ class TestSongQueue(unittest.TestCase):
         self.queue.close()
 
     def test_pop(self):
-        first_song = Song("testidpop", self._loader("testidpop"))
+        first_song = Song("testidpop", self.song_provider)
         self.queue.append(first_song)
         song = self.queue.pop(0)
         self.assertTrue(song == first_song)
@@ -57,8 +60,9 @@ class TestSongQueue(unittest.TestCase):
         self.assertTrue(isinstance(song, Song))
 
     def test_append(self):
-        song = Song("testidappend1", self._loader("testidappend1"))
-        song2 = Song("testidappend2", self._loader("testidappend2"))
+        song_provider = self.song_provider
+        song = Song("testidappend1", song_provider)
+        song2 = Song("testidappend2", song_provider)
         queue = self.queue
 
         queue.append(song)
@@ -67,7 +71,7 @@ class TestSongQueue(unittest.TestCase):
         self.assertTrue(song2 in queue)
 
     def test_append_duplicate(self):
-        song = Song("testidappenddup", self._loader("testidappenddup"))
+        song = Song("testidappenddup", self.song_provider)
         queue = self.queue
         queue.append(song)
         self.assertTrue(song in queue)
