@@ -15,6 +15,9 @@ class TestSong(unittest.TestCase):
         def __init__(self):
             pass
 
+        def get_name(self):
+            return "testapi"
+
         def load_song(self, song):
             return "test.wav"
 
@@ -55,6 +58,10 @@ class TestSong(unittest.TestCase):
     def test_str(self):
         for song in self._create_test_songs():
             self.assertTrue(str(song))
+
+    def test_json(self):
+        for song in self._create_test_songs():
+            self.assertEqual(song, Song.from_json(song.to_json(), {"testapi": TestSong._TestAPI()}))
 
 
 class APITest(object):

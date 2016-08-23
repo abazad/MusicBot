@@ -58,6 +58,46 @@ class Song(object):
         self.loaded = True
         return fname
 
+    def to_json(self):
+        return {
+            "song_id": self.song_id,
+            "api_name": self._api.get_name(),
+            "artist": self.artist,
+            "title": self.title,
+            "albumArtUrl": self.albumArtUrl,
+            "str_rep": self._str_rep
+        }
+
+    @staticmethod
+    def from_json(json, apis):
+        '''
+        Create a song from json.
+
+        Keyword arguments:
+        json -- the json representation of a song
+        apis -- a dict from api names to apis
+        '''
+
+        try:
+            song_id = json['song_id']
+        except KeyError:
+            raise ValueError("invalid json (missing song_id")
+
+        try:
+            api_name = json['api_name']
+            api = apis[api_name]
+        except KeyError:
+            raise ValueError("invalid json (missing api_name)")
+
+        return Song(
+            song_id=song_id,
+            api=api,
+            artist=json.get("artist", None),
+            title=json.get("title", None),
+            albumArtUrl=json.get("albumArtUrl", None),
+            str_rep=json.get("str_rep", None),
+        )
+
     def __repr__(self):
         return self.song_id
 
