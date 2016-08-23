@@ -464,7 +464,7 @@ class GMusicAPI(AbstractSongProvider):
                     # Sometimes, the call returns a 403
                     attempts -= 1
                     logger = logging.getLogger("musicbot")
-                    logger.error("403, retrying... ({} attempts left)", attempts)
+                    logger.error("403, retrying... (%d attempts left)", attempts)
                     if not attempts:
                         logger.exception(e)
                         raise IOError("Can't download song from Google Play")
@@ -492,7 +492,7 @@ class GMusicAPI(AbstractSongProvider):
                         gmusic_device_id = secrets.get("gmusic_device_id", None)
                     except KeyError as e:
                         logger = logging.getLogger("musicbot")
-                        logger.critial("Missing GMusic secrets")
+                        logger.critical("Missing GMusic secrets")
                         raise e
 
                     missing_device_id = not gmusic_device_id

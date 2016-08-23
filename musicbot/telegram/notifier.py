@@ -57,8 +57,11 @@ class Subscribable(object):
     def send_keyboard(self, *args, **kwargs):
         raise NotImplementedError()
 
+    def send_callback_keyboard(self, *args, **kwargs):
+        raise NotImplementedError()
 
-class Cause(Enum):
+
+class Cause(object):
     current_song = lambda song: "Now playing: " + str(song)
     queue_add = lambda song: "Added to queue: " + str(song)
     queue_remove = lambda song: "Removed from queue: " + str(song)

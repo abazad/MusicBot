@@ -342,6 +342,7 @@ class TelegramBot(notifier.Subscribable):
 
         return _first_action(self, bot, update)
 
+    @dispatcher.run_async
     @decorators.password_protected_command
     def play_command(self, bot, update):
         self._player.resume()

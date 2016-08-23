@@ -4,7 +4,7 @@ from musicbot.telegram.user import User
 
 
 def plugin_command(func):
-    def _command(self, *args):
+    def _command(_, *args):
         return func(*args)
     return _command
 
@@ -72,7 +72,7 @@ def keyboard_answer_handler(func):
         if str.isdecimal(c):
             return func(int(c))
         else:
-            logging.getLogger("musicbot").debug("INVALID CHOICE:", c)
+            logging.getLogger("musicbot").debug("INVALID CHOICE: %s", c)
             return False
     return _handler
 
