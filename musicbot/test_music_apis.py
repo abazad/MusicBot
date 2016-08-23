@@ -89,6 +89,11 @@ class APITest(object):
         fname = song.load()
         self.assertTrue(os.path.isfile(fname))
 
+    def test_get_name(self):
+        name = self.api.get_name()
+        self.assertTrue(name)
+        self.assertTrue(isinstance(name, str))
+
 
 class SongProviderTest(object):
 
