@@ -42,6 +42,7 @@ class SongQueue(list):
     def append(self, song):
         def _load_appended():
             logger = logging.getLogger("musicbot")
+            self._song_provider.remove_from_suggestions(song)
             logger.debug("LOADING APPENDED SONG: %s", str(song))
             song.load()
             logger.debug("FINISHED LOADING APPENDED SONG: %s", str(song))

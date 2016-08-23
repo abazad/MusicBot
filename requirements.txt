@@ -7,3 +7,8 @@ simpleaudio
 pylru
 soundcloud
 colorama
+hug
+passlib
+pyjwt
+bcrypt
+aiohttp_wsgi

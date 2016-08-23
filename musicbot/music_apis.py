@@ -144,7 +144,15 @@ class AbstractAPI(object):
 
     def get_name(self):
         '''
-        Return the name of the API
+        Return the unique name of this API.
+        The name can't contain any whitespace. Use lower_snake_case.
+        '''
+        raise NotImplementedError()
+
+    def get_pretty_name(self):
+        '''
+        Return a pretty name of this API to show users.
+        This name can be an arbitrary string.
         '''
         raise NotImplementedError()
 
@@ -277,6 +285,12 @@ class AbstractSongProvider(AbstractAPI):
         '''
         raise NotImplementedError()
 
+    def remove_from_suggestions(self, song):
+        '''
+        Remove a song from the currently loaded suggestions.
+        If the song is not in the suggestions, nothing happens.
+        '''
+
     def reload(self):
         '''
         Reload suggestions. Do not drop the playlist.
@@ -311,6 +325,9 @@ class GMusicAPI(AbstractSongProvider):
 
     def get_name(self):
         return "gmusic"
+
+    def get_pretty_name(self):
+        return "Google Play Music"
 
     def lookup_song(self, song_id):
         songs = self._songs
@@ -382,6 +399,12 @@ class GMusicAPI(AbstractSongProvider):
             return self._suggestions[:max_len]
         else:
             return self._suggestions
+
+    def remove_from_suggestions(self, song):
+        try:
+            self._suggestions.remove(song)
+        except ValueError:
+            pass
 
     def reload(self):
         self._suggestions.clear()
@@ -615,6 +638,9 @@ class YouTubeAPI(AbstractAPI):
     def get_name(self):
         return "youtube"
 
+    def get_pretty_name(self):
+        return "YouTube"
+
     def lookup_song(self, song_id):
         songs = self._songs
         if not song_id:
@@ -694,6 +720,9 @@ class SoundCloudAPI(AbstractAPI):
 
     def get_name(self):
         return "soundcloud"
+
+    def get_pretty_name(self):
+        return "SoundCloud"
 
     def lookup_song(self, song_id):
         songs = self._songs
