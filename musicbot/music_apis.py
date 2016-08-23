@@ -87,7 +87,7 @@ class Song(object):
             api_name = json['api_name']
             api = apis[api_name]
         except KeyError:
-            raise ValueError("invalid json (missing api_name)")
+            raise ValueError("invalid json (missing or invalid api_name)")
 
         return Song(
             song_id=song_id,
