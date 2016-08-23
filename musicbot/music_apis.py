@@ -153,7 +153,11 @@ class AbstractAPI(object):
                             if isfile(native_fname_tmp):
                                 os.remove(native_fname_tmp)
 
-                            download(native_fname_tmp)
+                            try:
+                                download(native_fname_tmp)
+                            except Exception as e:
+                                logging.getLogger("musicbot").exception("Exception during download")
+                                raise e
                             os.rename(native_fname_tmp, native_fname)
 
                 with self._conversion_semaphore:
