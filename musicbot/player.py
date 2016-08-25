@@ -31,8 +31,8 @@ class SongQueue(list):
 
         try:
             result = list.pop(self, *args, **kwargs)
-            if isinstance(result._api, AbstractSongProvider):
-                result._api.add_played(result)
+            if isinstance(result.api, AbstractSongProvider):
+                result.api.add_played(result)
         except IndexError:
             result = self._song_provider.get_song()
             self._prepare_event.set()

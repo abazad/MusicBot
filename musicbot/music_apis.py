@@ -15,15 +15,15 @@ import pylru
 
 class Song(object):
 
-    def __init__(self, song_id, api, artist=None, title=None, albumArtUrl=None, str_rep=None):
+    def __init__(self, song_id, api, title=None, description=None, albumArtUrl=None, str_rep=None):
         '''
         Constructor
 
         Keyword arguments:
         song_id -- the unique ID of the song
         api -- an instance of AbstractAPI capable of loading this song
-        artist -- the artist. If present, also supply title
-        title -- the title. If present, also supply artist
+        title -- the song title
+        description -- a description of the title (e.g. 'by [artist]'
         albumArtUrl -- a URL to the album art
         str_rep -- a readable string representation for this instance. Will be returned for __str__()
         '''
@@ -35,24 +35,28 @@ class Song(object):
             raise ValueError("Song ID None")
 
         self.song_id = str(song_id)
-        if artist or title:
-            if not (artist and title):
-                raise ValueError("artist and title have to be supplied together")
-        self.artist = artist
+        self.api = api
         self.title = title
+        self.description = description
         self.albumArtUrl = albumArtUrl
-        self._str_rep = str_rep
         self._api = api
         self.loaded = False
+
+        if str_rep:
+            self._str_rep = str_rep
+        elif title:
+            self._str_rep = title
+        else:
+            self._str_rep = "Unknown"
 
     def load(self):
         '''
         Load the song, convert it to wav and return the path to the song file.
         '''
-        if not self._api:
+        if not self.api:
             raise NotImplementedError()
 
-        fname = self._api.load_song(self)
+        fname = self.api.load_song(self)
         # When the song has been loaded, this method can be replaced by a simple method returning the filename
         self.load = lambda: fname
         self.loaded = True
@@ -61,9 +65,9 @@ class Song(object):
     def to_json(self):
         return {
             "song_id": self.song_id,
-            "api_name": self._api.get_name(),
-            "artist": self.artist,
+            "api_name": self.api.get_name(),
             "title": self.title,
+            "description": self.description,
             "albumArtUrl": self.albumArtUrl,
             "str_rep": self._str_rep
         }
@@ -92,8 +96,8 @@ class Song(object):
         return Song(
             song_id=song_id,
             api=api,
-            artist=json.get("artist", None),
             title=json.get("title", None),
+            description=json.get("description", None),
             albumArtUrl=json.get("albumArtUrl", None),
             str_rep=json.get("str_rep", None),
         )
@@ -102,21 +106,13 @@ class Song(object):
         return self.song_id
 
     def __str__(self):
-        if self._str_rep:
-            result = self._str_rep
-        elif self.artist and self.title:
-            result = "{} - {}".format(self.artist, self.title)
-        else:
-            result = "Unknown"
-        self._str_rep = result
-        return result
+        return self._str_rep
 
     def __hash__(self):
         return hash(self.song_id)
 
     def __eq__(self, other):
-        result = self.song_id == other.song_id
-        return result
+        return self.song_id == other.song_id
 
     def __lt__(self, other):
         return self.__str__() < other.__str__()
@@ -353,7 +349,7 @@ class GMusicAPI(AbstractSongProvider):
             yield _song_from_info(info)
 
     def load_song(self, song):
-        if song._api != self:
+        if song.api != self:
             raise ValueError("tried to load song not created by this API")
         return self._get_loader(song.song_id)()
 
@@ -424,7 +420,9 @@ class GMusicAPI(AbstractSongProvider):
             self._suggestions.extend(map(self._song_from_info, api_songs))
         else:
             song_id = "Tj6fhurtstzgdpvfm4xv6i5cei4"
-            fallback_song = Song(song_id, self, "Mickie Krause", "Biste braun kriegste Fraun")
+            fallback_song = Song(song_id, self,
+                                 "Biste braun kriegste Fraun", "by Mickie Krause",
+                                 str_rep="Mickie Krause - Biste braun kriegste Fraun")
             self._suggestions.append(fallback_song)
 
     def _remote_playlist_load(self):
@@ -553,7 +551,7 @@ class GMusicAPI(AbstractSongProvider):
                 if "url" in ref:
                     url = ref["url"]
 
-        song = Song(song_id, self, artist, title, url)
+        song = Song(song_id, self, title, "by " + artist, url, " - ".join([artist, title]))
         songs[song_id] = song
         return song
 
@@ -652,9 +650,10 @@ class YouTubeAPI(AbstractAPI):
         else:
             url = "https://www.youtube.com/watch?v=" + song_id
             video = self._pafy.new(url)
-            str_rep = video.title
+            title = video.title
+            description = video.description
             url = video.thumb
-            song = Song(song_id, self, albumArtUrl=url, str_rep=str_rep)
+            song = Song(song_id, self, title, description, albumArtUrl=url)
             songs[song_id] = song
             return song
 
@@ -683,14 +682,14 @@ class YouTubeAPI(AbstractAPI):
             except KeyError:
                 pass
 
-            return Song(song_id, self, albumArtUrl=url, str_rep=title)
+            return Song(song_id, self, albumArtUrl=url, title=title)
 
         songs = self._pafy.call_gdata('search', qs)['items']
         for track in songs:
             yield _track_to_song(track)
 
     def load_song(self, song):
-        if song._api != self:
+        if song.api != self:
             raise ValueError("tried to load song not created by this API")
         return self._get_loader(song.song_id)()
 
@@ -758,7 +757,7 @@ class SoundCloudAPI(AbstractAPI):
                 break
 
     def load_song(self, song):
-        if song._api != self:
+        if song.api != self:
             raise ValueError("tried to load song not created by this API")
         info = self._client.get("/tracks/{}".format(song.song_id))
         return self._get_loader(song.song_id, info.stream_url)()
@@ -781,7 +780,7 @@ class SoundCloudAPI(AbstractAPI):
         artist = info.user['username']
         title = info.title
         url = info.artwork_url
-        song = Song(song_id, self, artist, title, url)
+        song = Song(song_id, self, title, "by " + artist, url, " - ".join([artist, title]))
         songs[song_id] = song
         return song
 
