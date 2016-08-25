@@ -564,6 +564,8 @@ class GMusicAPI(AbstractSongProvider):
             while attempts and not url:
                 try:
                     url = self._api.get_stream_url(song_id, quality=self._quality)
+                    if not url:
+                        raise CallFailure("call returned None for song_id {}".format(song_id), "get_stream_url")
                 except CallFailure as e:
                     # Sometimes, the call returns a 403
                     attempts -= 1
