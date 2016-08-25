@@ -2,6 +2,7 @@ import logging
 import threading
 import time
 
+from musicbot.music_apis import AbstractSongProvider
 from musicbot.telegram.notifier import Notifier, Cause
 
 
@@ -30,10 +31,8 @@ class SongQueue(list):
 
         try:
             result = list.pop(self, *args, **kwargs)
-            # All gmusic store ids start with T and are 27 chars long
-            song_id = result.song_id
-            if song_id.startswith("T") and len(song_id) == 27:
-                self._song_provider.add_played(result)
+            if isinstance(result._api, AbstractSongProvider):
+                result._api.add_played(result)
         except IndexError:
             result = self._song_provider.get_song()
             self._prepare_event.set()
