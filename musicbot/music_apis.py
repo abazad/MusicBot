@@ -737,12 +737,14 @@ class SoundCloudAPI(AbstractAPI):
     def search_song(self, query, max_fetch=200):
         if not query:
             raise ValueError("query is None")
-        max_fetch = min(50, max_fetch)
-        resource = self._client.get("tracks/", q=query, limit=max_fetch, linked_partitioning=1)
+        act_max_fetch = min(50, max_fetch)
+        resource = self._client.get("tracks/", q=query, limit=act_max_fetch, linked_partitioning=1)
         _info_to_song = self._song_from_info
-        while True:
+        count = 0
+        while count < max_fetch:
             for info in resource.collection:
                 song = _info_to_song(info)
+                count += 1
                 yield song
 
             try:
