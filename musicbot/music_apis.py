@@ -220,7 +220,7 @@ class AbstractAPI(object):
                             try:
                                 download(native_fname_tmp)
                             except Exception as e:
-                                logging.getLogger("musicbot").exception("Exception during download")
+                                logging.getLogger("musicbot").exception("Exception during download of %s", song_id)
                                 raise e
                             os.rename(native_fname_tmp, native_fname)
 
