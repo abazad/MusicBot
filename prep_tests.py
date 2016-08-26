@@ -1,4 +1,7 @@
+
+from datetime import datetime
 import json
+import logging
 import os
 
 
@@ -26,5 +29,22 @@ def save_secrets():
     with open("config/secrets.json", 'w') as secrets_file:
         secrets_file.write(json.dumps(secrets))
 
+
+def initialize_logger():
+    # Initialize logger
+    os.makedirs("logs", exist_ok=True)
+
+    logger = logging.getLogger("musicbot")
+    logger.setLevel(logging.DEBUG)
+
+    formatter = logging.Formatter(
+        "%(asctime)s (%(levelname)s, %(filename)s:%(lineno)s): %(message)s", datefmt="%H:%M:%S")
+
+    file_handler = logging.FileHandler(datetime.utcnow().strftime("logs/tests.log"), encoding="utf-8", mode='w')
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+
 if __name__ == '__main__':
     save_secrets()
+    initialize_logger()

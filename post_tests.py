@@ -23,8 +23,9 @@ def restore_blank_secrets():
 def save_logs():
     print("Copying logs to artifacts dir")
 
+    tests_logs_path = "logs/tests.log"
     target_dir = os.environ['CIRCLE_ARTIFACTS']
-    shutil.copytree("logs", os.path.join(target_dir, "logs"))
+    shutil.copy(tests_logs_path, target_dir)
 
 
 if __name__ == '__main__':
