@@ -1,4 +1,6 @@
 import json
+import os
+import shutil
 
 
 def restore_blank_secrets():
@@ -18,5 +20,13 @@ def restore_blank_secrets():
         secrets_file.write(json.dumps(secrets, indent=4, sort_keys=True))
 
 
+def save_logs():
+    print("Copying logs to artifacts dir")
+
+    target_dir = os.environ['CIRCLE_ARTIFACTS']
+    shutil.copytree("logs", os.path.join(target_dir, "logs"))
+
+
 if __name__ == '__main__':
     restore_blank_secrets()
+    save_logs()
