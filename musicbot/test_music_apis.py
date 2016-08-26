@@ -1,5 +1,6 @@
 from _collections_abc import Iterable
 import json
+import logging
 import os
 import unittest
 
@@ -118,6 +119,7 @@ class TestGMusicAPI(unittest.TestCase, APITest, SongProviderTest):
         try:
             cls.api = GMusicAPI(config_dir, config, secrets)
         except ValueError as e:
+            logging.getLogger("musicbot").warning("GMusic test skipped")
             cls.skipTest("Invalid or missing gmusic secrets ({})".format(str(e)))
 
     @classmethod
@@ -156,6 +158,7 @@ class TestYoutubeAPI(unittest.TestCase, APITest):
         try:
             cls.api = YouTubeAPI(config_dir, config, secrets)
         except ValueError as e:
+            logging.getLogger("musicbot").warning("GMusic test skipped")
             cls.skipTest("Invalid or missing YouTube secrets ({})".format(str(e)))
 
     @classmethod
@@ -179,6 +182,7 @@ class TestSoundCloudAPI(unittest.TestCase, APITest):
         try:
             cls.api = SoundCloudAPI(config_dir, config, secrets)
         except ValueError as e:
+            logging.getLogger("musicbot").warning("GMusic test skipped")
             cls.skipTest("Invalid or missing SoundCloud secrets ({})".format(str(e)))
 
     @classmethod
