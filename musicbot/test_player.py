@@ -4,6 +4,7 @@ import unittest
 
 from musicbot.music_apis import Song, AbstractSongProvider
 from musicbot.player import SongQueue
+import test_logger
 
 
 class TestSongProvider(AbstractSongProvider):

@@ -5,6 +5,7 @@ import os
 import unittest
 
 from musicbot.music_apis import Song, GMusicAPI, YouTubeAPI, SoundCloudAPI
+import test_logger
 
 
 class TestSong(unittest.TestCase):
