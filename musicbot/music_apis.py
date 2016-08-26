@@ -386,7 +386,16 @@ class GMusicAPI(AbstractSongProvider):
         if not self._playlist_id:
             playlist_name = self._format_playlist_name("BotPlaylist created on {} at {}")
             self._playlist_id = self._api.create_playlist(playlist_name)
-            playlist = list(filter(lambda p: p['id'] == self._playlist_id, self._api.get_all_playlists()))[0]
+            playlists = list(filter(lambda p: p['id'] == self._playlist_id, self._api.get_all_playlists()))
+            if not playlists:
+                logger = logging.getLogger("musicbot")
+                logger.warning("Didn't find playlist that was created a moment ago. (Trying again)")
+                time.sleep(0.5)
+                playlists = list(filter(lambda p: p['id'] == self._playlist_id, self._api.get_all_playlists()))
+                if not playlists:
+                    logger.critical("Retry failed!")
+                    raise IOError("Could not find created playlist")
+            playlist = playlists[0]
             self._playlist_token = playlist['shareToken']
             self._write_ids()
 
