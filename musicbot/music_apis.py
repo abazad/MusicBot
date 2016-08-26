@@ -497,7 +497,7 @@ class GMusicAPI(AbstractSongProvider):
                     except KeyError as e:
                         logger = logging.getLogger("musicbot")
                         logger.critical("Missing GMusic secrets")
-                        raise e
+                        raise ValueError("Missing secrets key: " + str(e))
 
                     missing_device_id = not gmusic_device_id
                     if missing_device_id or gmusic_device_id.upper() == "MAC":
@@ -515,7 +515,7 @@ class GMusicAPI(AbstractSongProvider):
                         logger = logging.getLogger("musicbot")
                         logger.error("No device ID provided, printing registered devices:")
                         logger.error(json.dumps(devices, indent=4, sort_keys=True))
-                        raise KeyError("Missing device ID in secrets")
+                        raise ValueError("Missing device ID in secrets")
 
                     cls._api = api
         finally:
@@ -533,7 +533,7 @@ class YouTubeAPI(AbstractAPI):
         try:
             self._api_key = secrets['youtube_api_key']
         except KeyError:
-            raise KeyError("Missing YouTube API key")
+            raise ValueError("Missing YouTube API key")
 
     def lookup_song(self, song_id):
         songs = self._songs
@@ -668,7 +668,7 @@ class SoundCloudAPI(AbstractAPI):
                     client = cls._soundcloud.Client(client_id=app_id)
                     cls._client = client
         except KeyError:
-            raise KeyError("Missing SoundCloud App ID")
+            raise ValueError("Missing SoundCloud App ID")
         finally:
             if locked:
                 cls._connect_lock.release()

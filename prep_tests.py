@@ -9,8 +9,18 @@ def save_secrets():
 
     print("Reading secrets from environment variables")
     secrets = {}
+
+    missing_key = False
     for key in secrets_keys:
-        secrets[key] = os.environ[key]
+        try:
+            secrets[key] = os.environ[key]
+        except KeyError:
+            print("Missing key:", key)
+            missing_key = True
+
+    if missing_key:
+        print("Aborting...")
+        return
 
     print("Writing secrets to secrets.json")
     with open("config/secrets.json", 'w') as secrets_file:

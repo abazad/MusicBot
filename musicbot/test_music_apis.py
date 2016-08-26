@@ -2,6 +2,7 @@ from _collections_abc import Iterable
 import json
 import os
 import unittest
+from unittest.case import skip
 
 from musicbot.music_apis import Song, GMusicAPI, YouTubeAPI, SoundCloudAPI
 
@@ -115,7 +116,10 @@ class TestGMusicAPI(unittest.TestCase, APITest, SongProviderTest):
             secrets = json.loads(secrets.read())
 
         cls.song_id = "Ttq2uszcaztntcgnllswbn4pnqy"
-        cls.api = GMusicAPI(config_dir, config, secrets)
+        try:
+            cls.api = GMusicAPI(config_dir, config, secrets)
+        except ValueError as e:
+            cls.skipTest("Invalid or missing gmusic secrets ({})".format(str(e)))
 
     @classmethod
     def tearDownClass(cls):
@@ -150,7 +154,10 @@ class TestYoutubeAPI(unittest.TestCase, APITest):
             secrets = json.loads(secrets.read())
 
         cls.song_id = "NJ1_JpRKeic"
-        cls.api = YouTubeAPI(config_dir, config, secrets)
+        try:
+            cls.api = YouTubeAPI(config_dir, config, secrets)
+        except ValueError as e:
+            cls.skipTest("Invalid or missing YouTube secrets ({})".format(str(e)))
 
     @classmethod
     def tearDownClass(cls):
@@ -170,7 +177,10 @@ class TestSoundCloudAPI(unittest.TestCase, APITest):
             secrets = json.loads(secrets.read())
 
         cls.song_id = "160239605"
-        cls.api = SoundCloudAPI(config_dir, config, secrets)
+        try:
+            cls.api = SoundCloudAPI(config_dir, config, secrets)
+        except ValueError as e:
+            cls.skipTest("Invalid or missing SoundCloud secrets ({})".format(str(e)))
 
     @classmethod
     def tearDownClass(cls):
