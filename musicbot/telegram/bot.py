@@ -370,6 +370,10 @@ class TelegramBot(notifier.Subscribable):
             if not description:
                 description = ""
 
+            duration = song.duration
+            if duration:
+                description = "{}\n{}".format(description, duration)
+
             result = InlineQueryResultArticle(
                 id=song.song_id,
                 title=title,

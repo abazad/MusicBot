@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import locale
 import logging
@@ -15,7 +16,7 @@ import pylru
 
 class Song(object):
 
-    def __init__(self, song_id, api, title=None, description=None, albumArtUrl=None, str_rep=None):
+    def __init__(self, song_id, api, title=None, description=None, albumArtUrl=None, str_rep=None, duration=None):
         '''
         Constructor
 
@@ -25,21 +26,22 @@ class Song(object):
         title -- the song title
         description -- a description of the title (e.g. 'by [artist]'
         albumArtUrl -- a URL to the album art
-        str_rep -- a readable string representation for this instance. Will be returned for __str__()
+        str_rep -- a human readable string representation for this instance. Will be returned for __str__(). The song duration maybe will automatically appended.
+        duration -- the song duration (as a string in the form [HH:]MM:SS)
         '''
         if not api:
             raise ValueError("api is None")
         if not isinstance(api, AbstractAPI):
             raise ValueError("api is not an instance of AbstractAPI")
         if not song_id:
-            raise ValueError("Song ID None")
+            raise ValueError("song_id None")
 
         self.song_id = str(song_id)
         self.api = api
-        self.title = title
         self.description = description
         self.albumArtUrl = albumArtUrl
         self._api = api
+        self.duration = duration
         self.loaded = False
 
         if str_rep:
@@ -48,6 +50,14 @@ class Song(object):
             self._str_rep = title
         else:
             self._str_rep = "Unknown"
+
+        if title:
+            self.title = title
+        else:
+            self.title = self._str_rep
+
+        if duration:
+            self._str_rep = "{} ({})".format(self._str_rep, duration)
 
     def load(self):
         '''
@@ -69,7 +79,8 @@ class Song(object):
             "title": self.title,
             "description": self.description,
             "albumArtUrl": self.albumArtUrl,
-            "str_rep": self._str_rep
+            "str_rep": self._str_rep,
+            "duration": self.duration
         }
 
     @staticmethod
@@ -100,6 +111,7 @@ class Song(object):
             description=json.get("description", None),
             albumArtUrl=json.get("albumArtUrl", None),
             str_rep=json.get("str_rep", None),
+            duration=json.get("duration", None)
         )
 
     def __repr__(self):
@@ -542,7 +554,8 @@ class GMusicAPI(AbstractSongProvider):
             return songs[song_id]
         artist = info['artist']
         title = info['title']
-
+        duration_millis = int(info['durationMillis'])
+        duration = datetime.fromtimestamp(duration_millis / 1000).strftime("%M:%S")
         url = None
         if "albumArtRef" in info:
             ref = info["albumArtRef"]
@@ -551,7 +564,7 @@ class GMusicAPI(AbstractSongProvider):
                 if "url" in ref:
                     url = ref["url"]
 
-        song = Song(song_id, self, title, "by " + artist, url, " - ".join([artist, title]))
+        song = Song(song_id, self, title, "by " + artist, url, " - ".join([artist, title]), duration)
         songs[song_id] = song
         return song
 
@@ -653,7 +666,8 @@ class YouTubeAPI(AbstractAPI):
             title = video.title
             description = video.description
             url = video.thumb
-            song = Song(song_id, self, title, description, albumArtUrl=url)
+            duration = video.duration
+            song = Song(song_id, self, title, description, albumArtUrl=url, duration=duration)
             songs[song_id] = song
             return song
 
@@ -674,6 +688,8 @@ class YouTubeAPI(AbstractAPI):
             song_id = track['id']['videoId']
             snippet = track['snippet']
             title = snippet['title']
+
+            # TODO, maybe find out duration
 
             url = None
             try:
@@ -780,7 +796,9 @@ class SoundCloudAPI(AbstractAPI):
         artist = info.user['username']
         title = info.title
         url = info.artwork_url
-        song = Song(song_id, self, title, "by " + artist, url, " - ".join([artist, title]))
+        duration_millis = info.duration
+        duration = datetime.fromtimestamp(duration_millis / 1000).strftime("%M:%S")
+        song = Song(song_id, self, title, "by " + artist, url, " - ".join([artist, title]), duration=duration)
         songs[song_id] = song
         return song
 
