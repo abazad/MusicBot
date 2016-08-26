@@ -31,6 +31,8 @@ def save_secrets():
 
 
 def initialize_logger():
+    print("Initializing logger")
+
     # Initialize logger
     os.makedirs("logs", exist_ok=True)
 
