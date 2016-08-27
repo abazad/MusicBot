@@ -66,6 +66,7 @@ class Player(object):
         self._player = None
         self._stop = False
         self._pause = False
+        self._last_played = []
         self._queue = SongQueue(song_provider)
         self._current_song = None
         self._lock = threading.Lock()
@@ -151,3 +152,10 @@ class Player(object):
         if self._player:
             self._player.stop()
         self._queue.close()
+
+    def _add_played(self, song):
+        self._last_played.append(song)
+        self._last_played = self._last_played[-20:]
+
+    def get_last_played(self):
+        return self._last_played
