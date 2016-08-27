@@ -41,6 +41,7 @@ class Song(object):
         self.albumArtUrl = albumArtUrl
         self._str_rep = str_rep
         self._loader = loader
+        self.loaded = False
 
     def load(self):
         '''
@@ -52,6 +53,7 @@ class Song(object):
         fname = self._loader()
         # When the song has been loaded, this method can be replaced by a simple method returning the filename
         self.load = lambda: fname
+        self.loaded = True
         return fname
 
     def __repr__(self):
