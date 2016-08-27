@@ -108,6 +108,18 @@ class Player(object):
                 logger.error("INVALID SONG POPPED OR STOP CALLED")
                 self._lock.release()
                 return
+
+            if not song.loaded:
+                try:
+                    next_song = self._queue[0]
+                    if next_song.loaded:
+                        logger.debug("Delay %s' because %s is already loaded.", song, next_song)
+                        self._queue.pop(0)
+                        self._queue.insert(0, song)
+                        song = next_song
+                except IndexError:
+                    pass
+
             fname = song.load()
 
             wave_obj = self._sa.WaveObject.from_wave_file(fname)
