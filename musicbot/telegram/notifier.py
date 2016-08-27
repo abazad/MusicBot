@@ -1,4 +1,3 @@
-from enum import Enum
 from telegram.inlinekeyboardbutton import InlineKeyboardButton
 from musicbot.telegram import decorators
 
