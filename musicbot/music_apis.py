@@ -284,11 +284,15 @@ class GMusicAPI(AbstractSongProvider):
             raise ValueError("Quality must be hi, mid or low")
         self._quality = quality
 
+    def _add_last_played_id(self, song_id):
+        self._last_played_ids.append(song_id)
+        self._last_played_ids = self._last_played_ids[-50:]
+
     def get_song(self):
         self._load_suggestions(1)
         song = self._suggestions.pop(0)
         song_id = song.song_id
-        self._last_played_ids.append(song_id)
+        self._add_last_played_id(song_id)
         return song
 
     def add_played(self, song):
@@ -296,7 +300,7 @@ class GMusicAPI(AbstractSongProvider):
             self._playlist.add(song)
             self._remote_playlist_add(song)
         self._suggestions = list(filter(lambda song: song != song, self._suggestions))
-        self._last_played_ids.append(song.song_id)
+        self._add_last_played_id(song.song_id)
 
     def get_playlist(self):
         return self._playlist
