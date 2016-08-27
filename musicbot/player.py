@@ -40,18 +40,18 @@ class SongQueue(list):
         return result
 
     def append(self, song):
-        def _append():
+        def _load_appended():
             logger = logging.getLogger("musicbot")
             logger.debug("LOADING APPENDED SONG: %s", str(song))
             song.load()
-            self._append_lock.acquire()
-            if song not in self:
-                list.append(self, song)
-            self._append_lock.release()
             logger.debug("FINISHED LOADING APPENDED SONG: %s", str(song))
             Notifier.notify(Cause.queue_add(song))
 
-        threading.Thread(target=_append, name="append_thread").start()
+        self._append_lock.acquire()
+        if song not in self:
+            list.append(self, song)
+            threading.Thread(target=_load_appended, name="load_appended_thread").start()
+        self._append_lock.release()
 
     def close(self):
         self._stop_preparing = True

@@ -1,5 +1,4 @@
 import os
-import time
 import unittest
 
 from musicbot.music_apis import Song, AbstractSongProvider
@@ -33,49 +32,47 @@ class TestSongQueue(unittest.TestCase):
     @classmethod
     def _loader(cls, song_id):
         def _loader():
-            cls.loaded.add(song_id)
             return song_id + ".wav"
         return _loader
+
+    def setUp(self):
+        self.queue = SongQueue(self.song_provider)
 
     @classmethod
     def setUpClass(cls):
         cls.song_provider = TestSongProvider(cls._loader)
-        cls.loaded = set()
-        song = cls.song_provider.get_suggestions(1)[0]
-        cls.queue = SongQueue(cls.song_provider)
-        while song.song_id not in cls.loaded:
-            time.sleep(0.2)
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.queue.close()
+    def tearDown(self):
+        self.queue.close()
 
     def test_pop(self):
         first_song = Song("testidpop", self._loader("testidpop"))
         self.queue.append(first_song)
-        found = False
-        time.sleep(0.2)
-        for _ in range(0, 10):
-            song = self.queue.pop(0)
-            if song == first_song:
-                found = True
-            self.assertTrue(song)
-            self.assertTrue(isinstance(song, Song))
-        self.assertTrue(found)
-        self.assertIn(first_song.song_id, self.loaded)
+        song = self.queue.pop(0)
+        self.assertTrue(song == first_song)
+
+    def test_empty_pop(self):
+        song = self.queue.pop(0)
+        self.assertTrue(song)
+        self.assertTrue(isinstance(song, Song))
 
     def test_append(self):
-        song = Song("testidappend", self._loader("testidappend"))
+        song = Song("testidappend1", self._loader("testidappend1"))
+        song2 = Song("testidappend2", self._loader("testidappend2"))
         queue = self.queue
-        queue.append(song)
-        attempts = 10
-        while song not in queue and attempts:
-            time.sleep(0.2)
-            attempts -= 1
-        self.assertTrue(song.song_id in self.loaded)
 
         queue.append(song)
-        time.sleep(0.5)
+        self.assertTrue(song in queue)
+        queue.append(song2)
+        self.assertTrue(song2 in queue)
+
+    def test_append_duplicate(self):
+        song = Song("testidappenddup", self._loader("testidappenddup"))
+        queue = self.queue
+        queue.append(song)
+        self.assertTrue(song in queue)
+
+        queue.append(song)
         self.assertTrue(len(list(filter(lambda song: song == song, self.queue))) == 1)
 
 
