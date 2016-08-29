@@ -1,7 +1,5 @@
-secrets.txt
-secrets.json
+config/
 songs/
 __pycache__/
-ids.json
 plugins/
 logs/
