@@ -130,6 +130,7 @@ def _add_client(client):
 
 _add_client_lock = threading.Lock()
 player = None
+queue = []
 music_api_names = {}
 apis_json = []
 token, clients, client_names = _read_secrets()
