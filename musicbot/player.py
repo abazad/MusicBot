@@ -26,6 +26,11 @@ class SongQueue(list):
             self._prepare_event.wait()
             self._prepare_event.clear()
 
+    def insert(self, index, song):
+        list.insert(self, index, song)
+        # TODO use thread pool
+        threading.Thread(target=lambda: song.load()).start()
+
     def pop(self, *args, **kwargs):
         result = None
 
@@ -50,6 +55,7 @@ class SongQueue(list):
         self._append_lock.acquire()
         if song not in self:
             list.append(self, song)
+            # TODO use thread pool
             threading.Thread(target=_load_appended, name="load_appended_thread").start()
         self._append_lock.release()
 
