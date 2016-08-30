@@ -56,9 +56,6 @@ class Song(object):
         else:
             self.title = self._str_rep
 
-        if duration:
-            self._str_rep = "{} ({})".format(self._str_rep, duration)
-
     def load(self):
         '''
         Load the song, convert it to wav and return the path to the song file.
@@ -118,7 +115,10 @@ class Song(object):
         return self.song_id
 
     def __str__(self):
-        return self._str_rep
+        if self.duration:
+            return "{} ({})".format(self._str_rep, self.duration)
+        else:
+            return self._str_rep
 
     def __hash__(self):
         return hash(self.song_id)
