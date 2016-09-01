@@ -11,8 +11,6 @@ from musicbot.plugin_handler import PluginLoader
 from musicbot.telegram import bot
 
 
-__version__ = 1.0
-
 # Initialize colorama for colored output
 colorama.init()
 
