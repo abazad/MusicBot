@@ -369,6 +369,8 @@ class TelegramBot(notifier.Subscribable):
 
             if not description:
                 description = ""
+            else:
+                description = description[:128]
 
             duration = song.duration
             if duration:
