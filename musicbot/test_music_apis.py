@@ -24,24 +24,21 @@ class TestSong(unittest.TestCase):
     def _create_test_songs(self):
         api = TestSong._TestAPI()
         return [Song("testid", api),
-                Song("testid", api, "testartist", "testtitle"),
+                Song("testid", api, "testtitle", "testdescription"),
                 Song("testid", api, str_rep="testrep"),
-                Song("testid", api, "testartist", "testtitle", str_rep="testrep"),
-                Song("testid", api, "testartist", "testtitle", albumArtUrl="testurl"),
+                Song("testid", api, "testtitle", "testdescription", str_rep="testrep"),
+                Song("testid", api, "testtitle", "testdescription", albumArtUrl="testurl"),
                 Song("testid", api, str_rep="testrep", albumArtUrl="testurl"),
-                Song("testid", api, "testartist", "testtitle", str_rep="testrep", albumArtUrl="testurl")]
+                Song("testid", api, "testtitle", "testdescription", str_rep="testrep", albumArtUrl="testurl"),
+                Song("testid", api, "testtitle", "testdescription", str_rep="testrep", albumArtUrl="testurl", duration="42:42")]
 
     def test_init_missing_required(self):
         with self.assertRaises(ValueError):
             Song(None, TestSong._TestAPI())
         with self.assertRaises(ValueError):
             Song("testid", None)
-
-    def test_init_invalid_values(self):
         with self.assertRaises(ValueError):
-            Song("testid", TestSong._TestAPI(), "testartist")
-        with self.assertRaises(ValueError):
-            Song("testid", TestSong._TestAPI(), None, "testtitle")
+            Song(None, None)
 
     def test_init_valid(self):
         self._create_test_songs()
