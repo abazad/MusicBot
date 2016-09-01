@@ -1,3 +1,4 @@
+from concurrent.futures.thread import ThreadPoolExecutor
 import logging
 import threading
 import time
@@ -14,6 +15,7 @@ class SongQueue(list):
         self._prepare_event = threading.Event()
         self._song_provider = song_provider
         self._append_lock = threading.Lock()
+        self._thread_pool = ThreadPoolExecutor()
         threading.Thread(name="prepare_thread", target=self._prepare_next).start()
 
     def _prepare_next(self):
@@ -28,8 +30,7 @@ class SongQueue(list):
 
     def insert(self, index, song):
         list.insert(self, index, song)
-        # TODO use thread pool
-        threading.Thread(target=lambda: song.load()).start()
+        self._thread_pool.submit(lambda: song.load())
 
     def pop(self, *args, **kwargs):
         result = None
@@ -55,13 +56,13 @@ class SongQueue(list):
         self._append_lock.acquire()
         if song not in self:
             list.append(self, song)
-            # TODO use thread pool
-            threading.Thread(target=_load_appended, name="load_appended_thread").start()
+            self._thread_pool.submit(_load_appended)
         self._append_lock.release()
 
     def close(self):
         self._stop_preparing = True
         self._prepare_event.set()
+        self._thread_pool.shutdown(False)
 
 
 class Player(object):
