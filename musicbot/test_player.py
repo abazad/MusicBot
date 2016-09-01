@@ -29,6 +29,9 @@ class TestSongProvider(AbstractSongProvider):
             songs.append(song)
         return songs
 
+    def add_played(self, song):
+        pass
+
 
 class TestSongQueue(unittest.TestCase):
 
