@@ -147,7 +147,7 @@ class AbstractAPI(object):
         self._config_dir = config_dir
         self._songs_path = songs_path
         self._create_semaphores(config)
-        self._loading_ids = set()
+        self._loading_ids = {}
         self._loading_ids_lock = threading.Lock()
 
     def get_name(self):
@@ -195,16 +195,6 @@ class AbstractAPI(object):
         download -- a function accepting only a target path which downloads the song with the song_id
         '''
         def _loader():
-            loading_ids_lock = self._loading_ids_lock
-            loading_ids_lock.acquire()
-            if song_id in self._loading_ids:
-                loading_ids_lock.release()
-                time.sleep(0.5)
-                return _loader()
-            else:
-                self._loading_ids.add(song_id)
-                loading_ids_lock.release()
-
             if isinstance(native_format, str):
                 _native_format = native_format
             elif hasattr(native_format, "__call__"):
@@ -215,6 +205,25 @@ class AbstractAPI(object):
             songs_path = self._songs_path
             fname = os.path.join(songs_path, ".".join([song_id, "wav"]))
             native_fname = os.path.join(songs_path, ".".join([song_id, _native_format]))
+
+            loading_ids_lock = self._loading_ids_lock
+
+            # Acquire a lock to access self._loading_ids
+            loading_ids_lock.acquire()
+            try:
+                # If another thread is loading the same song, there is an event in _loading_ids to wait for
+                event = self._loading_ids[song_id]
+                loading_ids_lock.release()
+                # Wait for the loading thread to call event.set().
+                # Since we released the loading_ids_lock before this, the event may already be set.
+                # In that case, the wait() call will return immediately.
+                event.wait()
+                return fname
+            except KeyError:
+                # There is no other thread loading this song (yet), so we can create a new
+                # event for this song to set at the end of the method.
+                self._loading_ids[song_id] = threading.Event()
+                loading_ids_lock.release()
 
             isfile = os.path.isfile
             if not isfile(fname):
@@ -244,7 +253,11 @@ class AbstractAPI(object):
                         os.rename(fname_tmp, fname)
 
             loading_ids_lock.acquire()
-            self._loading_ids.remove(song_id)
+            # Get the event other threads are possibly waiting for
+            event = self._loading_ids[song_id]
+            del self._loading_ids[song_id]
+            # Set the event. We removed it from _loading_ids so it will soon be garbage collected.
+            event.set()
             loading_ids_lock.release()
             return fname
         return _loader
