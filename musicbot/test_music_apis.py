@@ -1,53 +1,64 @@
 from _collections_abc import Iterable
 import json
+import logging
 import os
 import unittest
 
-from musicbot.music_apis import Song, GMusicAPI, YouTubeAPI, SoundCloudAPI
+from musicbot.music_apis import Song, GMusicAPI, YouTubeAPI, SoundCloudAPI, AbstractAPI
+import test_logger
 
 
 class TestSong(unittest.TestCase):
 
-    def _loader(self):
-        return "test.wav"
+    class _TestAPI(AbstractAPI):
+
+        def __init__(self):
+            pass
+
+        def get_name(self):
+            return "testapi"
+
+        def load_song(self, song):
+            return "test.wav"
 
     def _create_test_songs(self):
-        loader = self._loader
-        return [Song("testid", loader),
-                Song("testid", loader, "testartist", "testtitle"),
-                Song("testid", loader, str_rep="testrep"),
-                Song("testid", loader, "testartist", "testtitle", str_rep="testrep"),
-                Song("testid", loader, "testartist", "testtitle", albumArtUrl="testurl"),
-                Song("testid", loader, str_rep="testrep", albumArtUrl="testurl"),
-                Song("testid", loader, "testartist", "testtitle", str_rep="testrep", albumArtUrl="testurl")]
+        api = TestSong._TestAPI()
+        return [Song("testid", api),
+                Song("testid", api, "testtitle", "testdescription"),
+                Song("testid", api, str_rep="testrep"),
+                Song("testid", api, "testtitle", "testdescription", str_rep="testrep"),
+                Song("testid", api, "testtitle", "testdescription", albumArtUrl="testurl"),
+                Song("testid", api, str_rep="testrep", albumArtUrl="testurl"),
+                Song("testid", api, "testtitle", "testdescription", str_rep="testrep", albumArtUrl="testurl"),
+                Song("testid", api, "testtitle", "testdescription", str_rep="testrep", albumArtUrl="testurl", duration="42:42")]
 
     def test_init_missing_required(self):
         with self.assertRaises(ValueError):
-            Song(None, self._loader)
+            Song(None, TestSong._TestAPI())
         with self.assertRaises(ValueError):
             Song("testid", None)
-
-    def test_init_invalid_values(self):
         with self.assertRaises(ValueError):
-            Song("testid", self._loader, "testartist")
-        with self.assertRaises(ValueError):
-            Song("testid", self._loader, None, "testtitle")
+            Song(None, None)
 
     def test_init_valid(self):
         self._create_test_songs()
 
     def test_load(self):
-        song = Song("testid", self._loader)
+        song = Song("testid", TestSong._TestAPI())
         self.assertEqual("test.wav", song.load())
 
     def test_song_id(self):
-        song = Song("testid", self._loader)
+        song = Song("testid", TestSong._TestAPI())
         self.assertEqual("testid", song.song_id)
 
     # Make sure str returns something and doesn't throw errors
     def test_str(self):
         for song in self._create_test_songs():
             self.assertTrue(str(song))
+
+    def test_json(self):
+        for song in self._create_test_songs():
+            self.assertEqual(song, Song.from_json(song.to_json(), {"testapi": TestSong._TestAPI()}))
 
 
 class APITest(object):
@@ -74,6 +85,11 @@ class APITest(object):
         song = search_results.__next__()
         fname = song.load()
         self.assertTrue(os.path.isfile(fname))
+
+    def test_get_name(self):
+        name = self.api.get_name()
+        self.assertTrue(name)
+        self.assertTrue(isinstance(name, str))
 
 
 class SongProviderTest(object):
@@ -115,7 +131,11 @@ class TestGMusicAPI(unittest.TestCase, APITest, SongProviderTest):
             secrets = json.loads(secrets.read())
 
         cls.song_id = "Ttq2uszcaztntcgnllswbn4pnqy"
-        cls.api = GMusicAPI(config_dir, config, secrets)
+        try:
+            cls.api = GMusicAPI(config_dir, config, secrets)
+        except ValueError as e:
+            logging.getLogger("musicbot").warning("GMusic test skipped")
+            cls.skipTest("Invalid or missing gmusic secrets ({})".format(str(e)))
 
     @classmethod
     def tearDownClass(cls):
@@ -150,7 +170,11 @@ class TestYoutubeAPI(unittest.TestCase, APITest):
             secrets = json.loads(secrets.read())
 
         cls.song_id = "NJ1_JpRKeic"
-        cls.api = YouTubeAPI(config_dir, config, secrets)
+        try:
+            cls.api = YouTubeAPI(config_dir, config, secrets)
+        except ValueError as e:
+            logging.getLogger("musicbot").warning("GMusic test skipped")
+            cls.skipTest("Invalid or missing YouTube secrets ({})".format(str(e)))
 
     @classmethod
     def tearDownClass(cls):
@@ -170,7 +194,11 @@ class TestSoundCloudAPI(unittest.TestCase, APITest):
             secrets = json.loads(secrets.read())
 
         cls.song_id = "160239605"
-        cls.api = SoundCloudAPI(config_dir, config, secrets)
+        try:
+            cls.api = SoundCloudAPI(config_dir, config, secrets)
+        except ValueError as e:
+            logging.getLogger("musicbot").warning("GMusic test skipped")
+            cls.skipTest("Invalid or missing SoundCloud secrets ({})".format(str(e)))
 
     @classmethod
     def tearDownClass(cls):

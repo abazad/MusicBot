@@ -1,5 +1,8 @@
 import json
+import logging
 import os
+
+import test_logger
 
 
 def save_secrets():
@@ -7,12 +10,23 @@ def save_secrets():
         secrets = json.loads(secrets_file.read())
         secrets_keys = secrets.keys()
 
-    print("Reading secrets from environment variables")
+    logger = logging.getLogger("musicbot")
+    logger.info("Reading secrets from environment variables")
     secrets = {}
-    for key in secrets_keys:
-        secrets[key] = os.environ[key]
 
-    print("Writing secrets to secrets.json")
+    missing_key = False
+    for key in secrets_keys:
+        try:
+            secrets[key] = os.environ[key]
+        except KeyError:
+            print("Missing key:", key)
+            missing_key = True
+
+    if missing_key:
+        print("Aborting...")
+        return
+
+    logger.info("Writing secrets to secrets.json")
     with open("config/secrets.json", 'w') as secrets_file:
         secrets_file.write(json.dumps(secrets))
 

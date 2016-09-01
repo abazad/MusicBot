@@ -364,20 +364,23 @@ class TelegramBot(notifier.Subscribable):
         max_len = 20
 
         def _get_inline_result_article(song):
-            artist = song.artist
             title = song.title
-            str_rep = str(song)
-            if artist and title:
-                description = "by {}".format(artist)
-            else:
-                title = str_rep
+            description = song.description
+
+            if not description:
                 description = ""
+            else:
+                description = description[:128]
+
+            duration = song.duration
+            if duration:
+                description = "{}\n{}".format(description, duration)
 
             result = InlineQueryResultArticle(
                 id=song.song_id,
                 title=title,
                 description=description,
-                input_message_content=telegram.InputTextMessageContent(str_rep)
+                input_message_content=telegram.InputTextMessageContent(str(song))
             )
 
             url = song.albumArtUrl

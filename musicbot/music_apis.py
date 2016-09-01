@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import locale
 import logging
@@ -15,64 +16,115 @@ import pylru
 
 class Song(object):
 
-    def __init__(self, song_id, loader, artist=None, title=None, albumArtUrl=None, str_rep=None):
+    def __init__(self, song_id, api, title=None, description=None, albumArtUrl=None, str_rep=None, duration=None):
         '''
         Constructor
 
         Keyword arguments:
         song_id -- the unique ID of the song
-        loader -- a function taking no arguments which downloads this song and returns its filename
-        artist -- the artist. If present, also supply title
-        title -- the title. If present, also supply artist
+        api -- an instance of AbstractAPI capable of loading this song
+        title -- the song title
+        description -- a description of the title (e.g. 'by [artist]'
         albumArtUrl -- a URL to the album art
-        str_rep -- a readable string representation for this instance. Will be returned for __str__()
+        str_rep -- a human readable string representation for this instance. Will be returned for __str__(). The song duration maybe will automatically appended.
+        duration -- the song duration (as a string in the form [HH:]MM:SS)
         '''
-        if not loader:
-            raise ValueError("Loader is None")
+        if not api:
+            raise ValueError("api is None")
+        if not isinstance(api, AbstractAPI):
+            raise ValueError("api is not an instance of AbstractAPI")
         if not song_id:
-            raise ValueError("Song ID None")
+            raise ValueError("song_id None")
 
         self.song_id = str(song_id)
-        if artist or title:
-            if not (artist and title):
-                raise ValueError("artist and title have to be supplied together")
-        self.artist = artist
-        self.title = title
+        self.api = api
+        self.description = description
         self.albumArtUrl = albumArtUrl
-        self._str_rep = str_rep
-        self._loader = loader
+        self._api = api
+        self.duration = duration
+        self.loaded = False
+
+        if str_rep:
+            self._str_rep = str_rep
+        elif title:
+            self._str_rep = title
+        else:
+            self._str_rep = "Unknown"
+
+        if title:
+            self.title = title
+        else:
+            self.title = self._str_rep
 
     def load(self):
         '''
         Load the song, convert it to wav and return the path to the song file.
         '''
-        if not self._loader:
+        if not self.api:
             raise NotImplementedError()
 
-        fname = self._loader()
+        fname = self.api.load_song(self)
         # When the song has been loaded, this method can be replaced by a simple method returning the filename
         self.load = lambda: fname
+        self.loaded = True
         return fname
+
+    def to_json(self):
+        return {
+            "song_id": self.song_id,
+            "api_name": self.api.get_name(),
+            "title": self.title,
+            "description": self.description,
+            "albumArtUrl": self.albumArtUrl,
+            "str_rep": self._str_rep,
+            "duration": self.duration
+        }
+
+    @staticmethod
+    def from_json(json, apis):
+        '''
+        Create a song from json.
+
+        Keyword arguments:
+        json -- the json representation of a song
+        apis -- a dict from api names to apis
+        '''
+
+        try:
+            song_id = json['song_id']
+        except KeyError:
+            raise ValueError("invalid json (missing song_id")
+
+        try:
+            api_name = json['api_name']
+            api = apis[api_name]
+        except KeyError:
+            raise ValueError("invalid json (missing or invalid api_name)")
+
+        return Song(
+            song_id=song_id,
+            api=api,
+            title=json.get("title", None),
+            description=json.get("description", None),
+            albumArtUrl=json.get("albumArtUrl", None),
+            str_rep=json.get("str_rep", None),
+            duration=json.get("duration", None)
+        )
 
     def __repr__(self):
         return self.song_id
 
     def __str__(self):
-        if self._str_rep:
-            result = self._str_rep
-        elif self.artist and self.title:
-            result = "{} - {}".format(self.artist, self.title)
+        if self.duration:
+            return "{} ({})".format(self._str_rep, self.duration)
         else:
-            result = "Unknown"
-        self._str_rep = result
-        return result
+            return self._str_rep
 
     def __hash__(self):
         return hash(self.song_id)
 
     def __eq__(self, other):
-        result = self.song_id == other.song_id
-        return result
+        return self.song_id == other.song_id
 
     def __lt__(self, other):
         return self.__str__() < other.__str__()
@@ -95,8 +147,22 @@ class AbstractAPI(object):
         self._config_dir = config_dir
         self._songs_path = songs_path
         self._create_semaphores(config)
-        self._loading_ids = set()
+        self._loading_ids = {}
         self._loading_ids_lock = threading.Lock()
+
+    def get_name(self):
+        '''
+        Return the unique name of this API.
+        The name can't contain any whitespace. Use lower_snake_case.
+        '''
+        raise NotImplementedError()
+
+    def get_pretty_name(self):
+        '''
+        Return a pretty name of this API to show users.
+        This name can be an arbitrary string.
+        '''
+        raise NotImplementedError()
 
     def lookup_song(self, song_id):
         '''
@@ -113,6 +179,12 @@ class AbstractAPI(object):
         '''
         raise NotImplementedError()
 
+    def load_song(self, song):
+        '''
+        Load a song and return its filename
+        '''
+        raise NotImplementedError()
+
     def _get_thread_safe_loader(self, song_id, native_format, download):
         '''
         Return a song loader.
@@ -123,16 +195,6 @@ class AbstractAPI(object):
         download -- a function accepting only a target path which downloads the song with the song_id
         '''
         def _loader():
-            loading_ids_lock = self._loading_ids_lock
-            loading_ids_lock.acquire()
-            if song_id in self._loading_ids:
-                loading_ids_lock.release()
-                time.sleep(0.5)
-                return _loader()
-            else:
-                self._loading_ids.add(song_id)
-                loading_ids_lock.release()
-
             if isinstance(native_format, str):
                 _native_format = native_format
             elif hasattr(native_format, "__call__"):
@@ -143,6 +205,25 @@ class AbstractAPI(object):
             songs_path = self._songs_path
             fname = os.path.join(songs_path, ".".join([song_id, "wav"]))
             native_fname = os.path.join(songs_path, ".".join([song_id, _native_format]))
+
+            loading_ids_lock = self._loading_ids_lock
+
+            # Acquire a lock to access self._loading_ids
+            loading_ids_lock.acquire()
+            try:
+                # If another thread is loading the same song, there is an event in _loading_ids to wait for
+                event = self._loading_ids[song_id]
+                loading_ids_lock.release()
+                # Wait for the loading thread to call event.set().
+                # Since we released the loading_ids_lock before this, the event may already be set.
+                # In that case, the wait() call will return immediately.
+                event.wait()
+                return fname
+            except KeyError:
+                # There is no other thread loading this song (yet), so we can create a new
+                # event for this song to set at the end of the method.
+                self._loading_ids[song_id] = threading.Event()
+                loading_ids_lock.release()
 
             isfile = os.path.isfile
             if not isfile(fname):
@@ -156,7 +237,7 @@ class AbstractAPI(object):
                             try:
                                 download(native_fname_tmp)
                             except Exception as e:
-                                logging.getLogger("musicbot").exception("Exception during download")
+                                logging.getLogger("musicbot").exception("Exception during download of %s", song_id)
                                 raise e
                             os.rename(native_fname_tmp, native_fname)
 
@@ -172,7 +253,11 @@ class AbstractAPI(object):
                         os.rename(fname_tmp, fname)
 
             loading_ids_lock.acquire()
-            self._loading_ids.remove(song_id)
+            # Get the event other threads are possibly waiting for
+            event = self._loading_ids[song_id]
+            del self._loading_ids[song_id]
+            # Set the event. We removed it from _loading_ids so it will soon be garbage collected.
+            event.set()
             loading_ids_lock.release()
             return fname
         return _loader
@@ -221,6 +306,12 @@ class AbstractSongProvider(AbstractAPI):
         '''
         raise NotImplementedError()
 
+    def remove_from_suggestions(self, song):
+        '''
+        Remove a song from the currently loaded suggestions.
+        If the song is not in the suggestions, nothing happens.
+        '''
+
     def reload(self):
         '''
         Reload suggestions. Do not drop the playlist.
@@ -253,6 +344,12 @@ class GMusicAPI(AbstractSongProvider):
         self._load_ids()
         self._remote_playlist_load()
 
+    def get_name(self):
+        return "gmusic"
+
+    def get_pretty_name(self):
+        return "Google Play Music"
+
     def lookup_song(self, song_id):
         songs = self._songs
         if not song_id:
@@ -263,7 +360,7 @@ class GMusicAPI(AbstractSongProvider):
             try:
                 info = self._api.get_track_info(song_id)
             except CallFailure:
-                return Song(song_id, self._get_loader(song_id))
+                return Song(song_id, self)
             return self._song_from_info(info)
 
     def search_song(self, query, max_fetch=100):
@@ -276,6 +373,11 @@ class GMusicAPI(AbstractSongProvider):
             info = track['track']
             yield _song_from_info(info)
 
+    def load_song(self, song):
+        if song.api != self:
+            raise ValueError("tried to load song not created by this API")
+        return self._get_loader(song.song_id)()
+
     def set_quality(self, quality):
         if not quality:
             raise ValueError("quality is None")
@@ -284,11 +386,15 @@ class GMusicAPI(AbstractSongProvider):
             raise ValueError("Quality must be hi, mid or low")
         self._quality = quality
 
+    def _add_last_played_id(self, song_id):
+        self._last_played_ids.append(song_id)
+        self._last_played_ids = self._last_played_ids[-50:]
+
     def get_song(self):
         self._load_suggestions(1)
         song = self._suggestions.pop(0)
         song_id = song.song_id
-        self._last_played_ids.append(song_id)
+        self._add_last_played_id(song_id)
         return song
 
     def add_played(self, song):
@@ -296,7 +402,7 @@ class GMusicAPI(AbstractSongProvider):
             self._playlist.add(song)
             self._remote_playlist_add(song)
         self._suggestions = list(filter(lambda song: song != song, self._suggestions))
-        self._last_played_ids.append(song.song_id)
+        self._add_last_played_id(song.song_id)
 
     def get_playlist(self):
         return self._playlist
@@ -314,6 +420,12 @@ class GMusicAPI(AbstractSongProvider):
             return self._suggestions[:max_len]
         else:
             return self._suggestions
+
+    def remove_from_suggestions(self, song):
+        try:
+            self._suggestions.remove(song)
+        except ValueError:
+            pass
 
     def reload(self):
         self._suggestions.clear()
@@ -333,7 +445,9 @@ class GMusicAPI(AbstractSongProvider):
             self._suggestions.extend(map(self._song_from_info, api_songs))
         else:
             song_id = "Tj6fhurtstzgdpvfm4xv6i5cei4"
-            fallback_song = Song(song_id, self._get_loader(song_id), "Mickie Krause", "Biste braun kriegste Fraun")
+            fallback_song = Song(song_id, self,
+                                 "Biste braun kriegste Fraun", "by Mickie Krause",
+                                 str_rep="Mickie Krause - Biste braun kriegste Fraun")
             self._suggestions.append(fallback_song)
 
     def _remote_playlist_load(self):
@@ -386,7 +500,16 @@ class GMusicAPI(AbstractSongProvider):
         if not self._playlist_id:
             playlist_name = self._format_playlist_name("BotPlaylist created on {} at {}")
             self._playlist_id = self._api.create_playlist(playlist_name)
-            playlist = list(filter(lambda p: p['id'] == self._playlist_id, self._api.get_all_playlists()))[0]
+            playlists = list(filter(lambda p: p['id'] == self._playlist_id, self._api.get_all_playlists()))
+            if not playlists:
+                logger = logging.getLogger("musicbot")
+                logger.warning("Didn't find playlist that was created a moment ago. (Trying again)")
+                time.sleep(0.5)
+                playlists = list(filter(lambda p: p['id'] == self._playlist_id, self._api.get_all_playlists()))
+                if not playlists:
+                    logger.critical("Retry failed!")
+                    raise IOError("Could not find created playlist")
+            playlist = playlists[0]
             self._playlist_token = playlist['shareToken']
             self._write_ids()
 
@@ -444,7 +567,8 @@ class GMusicAPI(AbstractSongProvider):
             return songs[song_id]
         artist = info['artist']
         title = info['title']
-
+        duration_millis = int(info['durationMillis'])
+        duration = datetime.fromtimestamp(duration_millis / 1000).strftime("%M:%S")
         url = None
         if "albumArtRef" in info:
             ref = info["albumArtRef"]
@@ -453,7 +577,7 @@ class GMusicAPI(AbstractSongProvider):
                 if "url" in ref:
                     url = ref["url"]
 
-        song = Song(song_id, self._get_loader(song_id), artist, title, url)
+        song = Song(song_id, self, title, "by " + artist, url, " - ".join([artist, title]), duration)
         songs[song_id] = song
         return song
 
@@ -464,6 +588,8 @@ class GMusicAPI(AbstractSongProvider):
             while attempts and not url:
                 try:
                     url = self._api.get_stream_url(song_id, quality=self._quality)
+                    if not url:
+                        raise CallFailure("call returned None for song_id {}".format(song_id), "get_stream_url")
                 except CallFailure as e:
                     # Sometimes, the call returns a 403
                     attempts -= 1
@@ -497,7 +623,7 @@ class GMusicAPI(AbstractSongProvider):
                     except KeyError as e:
                         logger = logging.getLogger("musicbot")
                         logger.critical("Missing GMusic secrets")
-                        raise e
+                        raise ValueError("Missing secrets key: " + str(e))
 
                     missing_device_id = not gmusic_device_id
                     if missing_device_id or gmusic_device_id.upper() == "MAC":
@@ -515,7 +641,7 @@ class GMusicAPI(AbstractSongProvider):
                         logger = logging.getLogger("musicbot")
                         logger.error("No device ID provided, printing registered devices:")
                         logger.error(json.dumps(devices, indent=4, sort_keys=True))
-                        raise KeyError("Missing device ID in secrets")
+                        raise ValueError("Missing device ID in secrets")
 
                     cls._api = api
         finally:
@@ -533,7 +659,13 @@ class YouTubeAPI(AbstractAPI):
         try:
             self._api_key = secrets['youtube_api_key']
         except KeyError:
-            raise KeyError("Missing YouTube API key")
+            raise ValueError("Missing YouTube API key")
+
+    def get_name(self):
+        return "youtube"
+
+    def get_pretty_name(self):
+        return "YouTube"
 
     def lookup_song(self, song_id):
         songs = self._songs
@@ -543,10 +675,12 @@ class YouTubeAPI(AbstractAPI):
             return songs[song_id]
         else:
             url = "https://www.youtube.com/watch?v=" + song_id
-            video = self._pafy.new(url)
-            str_rep = video.title
+            video = self._pafy.new(url, gdata=True)
+            title = video.title
+            description = video.description
             url = video.thumb
-            song = Song(song_id, self._get_loader(song_id), albumArtUrl=url, str_rep=str_rep)
+            duration = video.duration
+            song = Song(song_id, self, title, description, albumArtUrl=url, duration=duration)
             songs[song_id] = song
             return song
 
@@ -567,6 +701,9 @@ class YouTubeAPI(AbstractAPI):
             song_id = track['id']['videoId']
             snippet = track['snippet']
             title = snippet['title']
+            description = snippet['description']
+
+            # TODO, maybe find out duration
 
             url = None
             try:
@@ -575,11 +712,16 @@ class YouTubeAPI(AbstractAPI):
             except KeyError:
                 pass
 
-            return Song(song_id, self._get_loader(song_id), albumArtUrl=url, str_rep=title)
+            return Song(song_id, self, title, description, albumArtUrl=url)
 
         songs = self._pafy.call_gdata('search', qs)['items']
         for track in songs:
             yield _track_to_song(track)
+
+    def load_song(self, song):
+        if song.api != self:
+            raise ValueError("tried to load song not created by this API")
+        return self._get_loader(song.song_id)()
 
     def _get_loader(self, song_id):
         audio = None
@@ -607,6 +749,12 @@ class SoundCloudAPI(AbstractAPI):
         super().__init__(config_dir, config)
         self._connect(secrets)
 
+    def get_name(self):
+        return "soundcloud"
+
+    def get_pretty_name(self):
+        return "SoundCloud"
+
     def lookup_song(self, song_id):
         songs = self._songs
         if not song_id:
@@ -620,12 +768,14 @@ class SoundCloudAPI(AbstractAPI):
     def search_song(self, query, max_fetch=200):
         if not query:
             raise ValueError("query is None")
-        max_fetch = min(50, max_fetch)
-        resource = self._client.get("tracks/", q=query, limit=max_fetch, linked_partitioning=1)
+        act_max_fetch = min(50, max_fetch)
+        resource = self._client.get("tracks/", q=query, limit=act_max_fetch, linked_partitioning=1)
         _info_to_song = self._song_from_info
-        while True:
+        count = 0
+        while count < max_fetch:
             for info in resource.collection:
                 song = _info_to_song(info)
+                count += 1
                 yield song
 
             try:
@@ -635,6 +785,12 @@ class SoundCloudAPI(AbstractAPI):
                 resource = self._client.get(next_href)
             except AttributeError:
                 break
+
+    def load_song(self, song):
+        if song.api != self:
+            raise ValueError("tried to load song not created by this API")
+        info = self._client.get("/tracks/{}".format(song.song_id))
+        return self._get_loader(song.song_id, info.stream_url)()
 
     def _get_loader(self, song_id, stream_url):
         def _download(path):
@@ -654,7 +810,9 @@ class SoundCloudAPI(AbstractAPI):
         artist = info.user['username']
         title = info.title
         url = info.artwork_url
-        song = Song(song_id, self._get_loader(song_id, info.stream_url), artist, title, url)
+        duration_millis = info.duration
+        duration = datetime.fromtimestamp(duration_millis / 1000).strftime("%M:%S")
+        song = Song(song_id, self, title, "by " + artist, url, " - ".join([artist, title]), duration=duration)
         songs[song_id] = song
         return song
 
@@ -668,7 +826,7 @@ class SoundCloudAPI(AbstractAPI):
                     client = cls._soundcloud.Client(client_id=app_id)
                     cls._client = client
         except KeyError:
-            raise KeyError("Missing SoundCloud App ID")
+            raise ValueError("Missing SoundCloud App ID")
         finally:
             if locked:
                 cls._connect_lock.release()

@@ -2,10 +2,10 @@ import os
 import sys
 from zipfile import ZipFile
 
-import main
+import _version
 
 
-whitelist = ["config", "musicbot", "LICENSE", "main.py", "requirements.txt", "updater.py"]
+whitelist = ["config", "musicbot", "LICENSE", "main.py", "rest_main.py", "requirements.txt", "updater.py"]
 
 
 def _add_file(package, cur_dir, file):
@@ -39,7 +39,7 @@ def _create_package():
     package_fname = os.path.join(
         target_dir, "{repo_name}-{branch}-{version}{sha1}.zip".format(repo_name=repo_name,
                                                                       branch=branch,
-                                                                      version=main.__version__,
+                                                                      version=_version.__version__,
                                                                       sha1=sha1))
 
     files = os.listdir(".")

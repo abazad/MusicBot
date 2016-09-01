@@ -1,7 +1,9 @@
+from concurrent.futures.thread import ThreadPoolExecutor
 import logging
 import threading
 import time
 
+from musicbot.music_apis import AbstractSongProvider
 from musicbot.telegram.notifier import Notifier, Cause
 
 
@@ -13,6 +15,7 @@ class SongQueue(list):
         self._prepare_event = threading.Event()
         self._song_provider = song_provider
         self._append_lock = threading.Lock()
+        self._thread_pool = ThreadPoolExecutor()
         threading.Thread(name="prepare_thread", target=self._prepare_next).start()
 
     def _prepare_next(self):
@@ -25,37 +28,41 @@ class SongQueue(list):
             self._prepare_event.wait()
             self._prepare_event.clear()
 
+    def insert(self, index, song):
+        list.insert(self, index, song)
+        self._thread_pool.submit(lambda: song.load())
+
     def pop(self, *args, **kwargs):
         result = None
 
         try:
             result = list.pop(self, *args, **kwargs)
-            # All gmusic store ids start with T and are 27 chars long
-            song_id = result.song_id
-            if song_id.startswith("T") and len(song_id) == 27:
-                self._song_provider.add_played(result)
+            if isinstance(result.api, AbstractSongProvider):
+                result.api.add_played(result)
         except IndexError:
             result = self._song_provider.get_song()
             self._prepare_event.set()
         return result
 
     def append(self, song):
-        def _append():
+        def _load_appended():
             logger = logging.getLogger("musicbot")
+            self._song_provider.remove_from_suggestions(song)
             logger.debug("LOADING APPENDED SONG: %s", str(song))
             song.load()
-            self._append_lock.acquire()
-            if song not in self:
-                list.append(self, song)
-            self._append_lock.release()
             logger.debug("FINISHED LOADING APPENDED SONG: %s", str(song))
             Notifier.notify(Cause.queue_add(song))
 
-        threading.Thread(target=_append, name="append_thread").start()
+        self._append_lock.acquire()
+        if song not in self:
+            list.append(self, song)
+            self._thread_pool.submit(_load_appended)
+        self._append_lock.release()
 
     def close(self):
         self._stop_preparing = True
         self._prepare_event.set()
+        self._thread_pool.shutdown(False)
 
 
 class Player(object):
@@ -66,6 +73,7 @@ class Player(object):
         self._player = None
         self._stop = False
         self._pause = False
+        self._last_played = []
         self._queue = SongQueue(song_provider)
         self._current_song = None
         self._lock = threading.Lock()
@@ -108,6 +116,18 @@ class Player(object):
                 logger.error("INVALID SONG POPPED OR STOP CALLED")
                 self._lock.release()
                 return
+
+            if not song.loaded:
+                try:
+                    next_song = self._queue[0]
+                    if next_song.loaded:
+                        logger.debug("Delay %s' because %s is already loaded.", song, next_song)
+                        self._queue.pop(0)
+                        self._queue.insert(0, song)
+                        song = next_song
+                except IndexError:
+                    pass
+
             fname = song.load()
 
             wave_obj = self._sa.WaveObject.from_wave_file(fname)
@@ -139,3 +159,10 @@ class Player(object):
         if self._player:
             self._player.stop()
         self._queue.close()
+
+    def _add_played(self, song):
+        self._last_played.append(song)
+        self._last_played = self._last_played[-20:]
+
+    def get_last_played(self):
+        return self._last_played
