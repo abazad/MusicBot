@@ -675,7 +675,7 @@ class YouTubeAPI(AbstractAPI):
             return songs[song_id]
         else:
             url = "https://www.youtube.com/watch?v=" + song_id
-            video = self._pafy.new(url)
+            video = self._pafy.new(url, gdata=True)
             title = video.title
             description = video.description
             url = video.thumb
