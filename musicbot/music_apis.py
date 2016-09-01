@@ -701,6 +701,7 @@ class YouTubeAPI(AbstractAPI):
             song_id = track['id']['videoId']
             snippet = track['snippet']
             title = snippet['title']
+            description = snippet['description']
 
             # TODO, maybe find out duration
 
@@ -711,7 +712,7 @@ class YouTubeAPI(AbstractAPI):
             except KeyError:
                 pass
 
-            return Song(song_id, self, albumArtUrl=url, title=title)
+            return Song(song_id, self, title, description, albumArtUrl=url)
 
         songs = self._pafy.call_gdata('search', qs)['items']
         for track in songs:
