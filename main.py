@@ -1,3 +1,4 @@
+from _signal import SIGINT
 from datetime import datetime
 import json
 import logging
@@ -57,12 +58,8 @@ try:
     with open(options.secrets_path, "r") as secrets_file:
         secrets = json.loads(secrets_file.read())
         secrets = {k: str.strip(v) for k, v in secrets.items()}
-        try:
-            gmusic_token = secrets["gmusic_bot_token"]
-        except KeyError:
-            print("Missing GMusic token")
-            sys.exit(1)
 
+        gmusic_token = secrets.get("gmusic_bot_token", None)
         youtube_token = secrets.get("youtube_bot_token", None)
         soundcloud_token = secrets.get("soundcloud_bot_token", None)
 except IOError:
@@ -88,26 +85,33 @@ apis = []
 try:
     gmusic_api = music_apis.GMusicAPI(config_dir, config, secrets)
     apis.append(gmusic_api)
-    if soundcloud_token:
-        soundcloud_api = music_apis.SoundCloudAPI(config_dir, config, secrets)
-        apis.append(soundcloud_api)
-    if youtube_token:
-        youtube_api = music_apis.YouTubeAPI(config_dir, config, secrets)
-        apis.append(youtube_api)
-except KeyError as e:
-    print(e)
+except ValueError as e:
+    logger.critical("Missing GMusic secrets. (%s)", e)
     sys.exit(3)
+
+try:
+    soundcloud_api = music_apis.SoundCloudAPI(config_dir, config, secrets)
+    apis.append(soundcloud_api)
+except ValueError as e:
+    logger.warning("Missing SoundCloud secrets. (%s)", e)
+
+try:
+    youtube_api = music_apis.YouTubeAPI(config_dir, config, secrets)
+    apis.append(youtube_api)
+except ValueError as e:
+    logger.warning("Missing YouTube secrets. (%s)", e)
+
 
 queued_player = player.Player(gmusic_api)
 
+if gmusic_token:
+    gmusic_bot = bot.TelegramBot(options, gmusic_token, plugins, gmusic_api, gmusic_api, queued_player)
 
-gmusic_bot = bot.TelegramBot(options, gmusic_token, plugins, gmusic_api, gmusic_api, queued_player)
-
-if youtube_token:
-    youtube_bot = bot.TelegramBot(options, youtube_token, plugins, youtube_api, gmusic_api, queued_player)
-
-if soundcloud_token:
+if soundcloud_token and soundcloud_api:
     soundcloud_bot = bot.TelegramBot(options, soundcloud_token, plugins, soundcloud_api, gmusic_api, queued_player)
+
+if youtube_token and youtube_api:
+    youtube_bot = bot.TelegramBot(options, youtube_token, plugins, youtube_api, gmusic_api, queued_player)
 
 
 def run():
@@ -117,4 +121,4 @@ def run():
 if(__name__ == "__main__"):
     run()
     gmusic_bot.idle()
-    sys.exit(0)
+    os.kill(os.getpid(), SIGINT)
