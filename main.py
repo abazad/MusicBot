@@ -18,6 +18,7 @@ colorama.init()
 # Initialize logger
 os.makedirs("logs", exist_ok=True)
 
+logging.getLogger().addHandler(logging.NullHandler())
 logger = logging.getLogger("musicbot")
 logger.setLevel(logging.DEBUG)
 
