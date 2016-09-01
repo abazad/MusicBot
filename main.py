@@ -72,6 +72,17 @@ except IOError:
 with open(os.path.join(config_dir, "config.json"), 'r') as config_file:
     config = json.loads(config_file.read())
 
+if config.get("auto_updates", False):
+    logger.info("Checking for updates...")
+    import updater
+    if updater.update():
+        logger.info("Restarting after update...")
+        os.execl(sys.executable, sys.executable, *sys.argv)
+        sys.exit(0)
+    else:
+        logger.info("No updates found.")
+
+
 apis = []
 
 try:
@@ -89,15 +100,6 @@ except KeyError as e:
 
 queued_player = player.Player(gmusic_api)
 
-if config.get("auto_updates", False):
-    logger.info("Checking for updates...")
-    import updater
-    if updater.update():
-        logger.info("Restarting after update...")
-        os.execl(sys.executable, sys.executable, *sys.argv)
-        sys.exit(0)
-    else:
-        logger.info("No updates found.")
 
 gmusic_bot = bot.TelegramBot(options, gmusic_token, plugins, gmusic_api, gmusic_api, queued_player)
 
