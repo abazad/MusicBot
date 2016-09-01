@@ -1,5 +1,5 @@
 # TelegramMusicBot
-This bot plays songs from Google Play Music, YouTube or Soundcloud selected by users via Telegram.  
+This bot plays songs from Google Play Music, YouTube or SoundCloud selected by users via Telegram.  
 
 ## Build status:
 branch | status
