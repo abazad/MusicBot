@@ -4,8 +4,8 @@ This bot plays songs from Google Play Music, YouTube or Soundcloud selected by u
 ## Build status:
 branch | status
 ------ | ------
-master | [![CircleCI](https://circleci.com/gh/BjoernPetersen/TelegramMusicBot/tree/master.svg?style=svg)](https://circleci.com/gh/BjoernPetersen/TelegramMusicBot/tree/master)  
-dev | [![CircleCI](https://circleci.com/gh/BjoernPetersen/TelegramMusicBot/tree/dev.svg?style=svg)](https://circleci.com/gh/BjoernPetersen/TelegramMusicBot/tree/dev)
+master | [![CircleCI](https://circleci.com/gh/BjoernPetersen/MusicBot/tree/master.svg?style=svg)](https://circleci.com/gh/BjoernPetersen/MusicBot/tree/master)  
+dev | [![CircleCI](https://circleci.com/gh/BjoernPetersen/MusicBot/tree/dev.svg?style=svg)](https://circleci.com/gh/BjoernPetersen/MusicBot/tree/dev)
 
 ## Installation:
 - See [Installation](../../wiki/Installation) and [Configuration](../../wiki/Configuration) wiki pages.
