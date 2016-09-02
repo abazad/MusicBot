@@ -77,6 +77,7 @@ class Player(object):
         self._queue = SongQueue(song_provider)
         self._current_song = None
         self._lock = threading.Lock()
+        self._next_chosen_event = threading.Event()
 
     def queue(self, song):
         self._queue.append(song)
@@ -97,6 +98,10 @@ class Player(object):
         self._pause = False
 
     def next(self):
+        '''
+        Skips to the next song.
+        This method will block until the next song is actually playing.
+        '''
         self._on_song_end()
 
     def get_current_song(self):
@@ -106,15 +111,21 @@ class Player(object):
         self._queue.clear()
 
     def _on_song_end(self):
-        thread_name = threading.current_thread().name
+        thread_name = str(threading.current_thread())
         logger = logging.getLogger("musicbot")
-        if self._lock.acquire(blocking=False):
+        # Get a reference to the current next_chosen_event.
+        # The object attribute is replaced by a new event object after the player thread left this method.
+        next_chosen_event = self._next_chosen_event
+        with self._lock:
+            if next_chosen_event.is_set():
+                # If some other thread was faster, return immediately to prevent multiple song skips
+                logger.debug("ENTERED _on_song_end after next_chosen (%s)", thread_name)
+                return
             logger.debug("ENTERED _on_song_end (%s)", thread_name)
             song = self._queue.pop(0)
             logger.debug("POPPED song: %s", str(song))
             if not song or self._stop:
                 logger.error("INVALID SONG POPPED OR STOP CALLED")
-                self._lock.release()
                 return
 
             if not song.loaded:
@@ -134,15 +145,12 @@ class Player(object):
             if self._player:
                 self._player.stop()
             self._player = wave_obj.play()
+            self._next_chosen_event.set()
             self._current_song = song
 
             Notifier.notify(Cause.current_song(song))
 
-            time.sleep(1)
             logger.debug("LEAVING _on_song_end (%s)", thread_name)
-            self._lock.release()
-        else:
-            logger.debug("Failed to acquire _on_song_end lock (%s)", thread_name)
 
     def run(self):
         def _run():
@@ -151,6 +159,7 @@ class Player(object):
                     time.sleep(1)
                 else:
                     self._on_song_end()
+                    self._next_chosen_event = threading.Event()
                     self._player.wait_done()
         threading.Thread(name="player_thread", target=_run).start()
 
