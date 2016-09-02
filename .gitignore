@@ -3,3 +3,7 @@ songs/
 __pycache__/
 plugins/
 logs/
+.project
+.pydevproject
+*.iml
+.idea/
