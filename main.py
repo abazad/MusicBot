@@ -117,7 +117,7 @@ def run():
     queued_player.run()
 
 
-if (__name__ == "__main__"):
+if __name__ == "__main__":
     run()
     gmusic_bot.idle()
     os.kill(os.getpid(), SIGINT)
