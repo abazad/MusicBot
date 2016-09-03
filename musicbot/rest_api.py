@@ -120,6 +120,8 @@ def _read_secrets():
 
 def _add_client(client):
     with _add_client_lock:
+        if clients.name in clients:
+            raise ValueError("client already in clients")
         clients[client.name] = client
         client_names.add(client.name)
         secrets_json = {"token": token, "clients": list(map(_SecretClient.to_json, clients.values()))}
@@ -177,7 +179,11 @@ def register(username, password, response=None):
         return "Invalid password. Must be of length >= 6"
     pw_hash = bcrypt_sha256.encrypt(password)
     client = _SecretClient(username, pw_hash, ["user"])
-    _add_client(client)
+    try:
+        _add_client(client)
+    except ValueError:
+        response.status = falcon.HTTP_CONFLICT
+        return "Name already in use"
     user_token = {
         "name": username,
         "permissions": client.permissions
