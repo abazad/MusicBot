@@ -44,7 +44,7 @@ class TelegramOptions(object):
         config_path = os.path.join(self._config_dir, "config.json")
         with open(config_path, 'r') as config_file:
             config = json.loads(config_file.read())
-            secrets_location = config.get("secrets_location", "config")
+            secrets_location = os.path.expanduser(config.get("secrets_location", "config"))
             self.secrets_path = os.path.join(secrets_location, "secrets.json")
             self.enable_suggestions = config.get("suggest_songs", 0)
             self.enable_password = config.get("enable_session_password", 1)

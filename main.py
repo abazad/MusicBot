@@ -64,7 +64,7 @@ try:
         youtube_token = secrets.get("youtube_bot_token", None)
         soundcloud_token = secrets.get("soundcloud_bot_token", None)
 except IOError:
-    print("Could not open secrets.json")
+    print("Could not open", options.secrets_path)
     sys.exit(2)
 
 with open(os.path.join(config_dir, "config.json"), 'r') as config_file:

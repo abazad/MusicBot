@@ -23,7 +23,8 @@ try:
     app.router.add_route("*", "/{path_info:.*}", wsgi_handler)
     sslcontext = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
 
-    sslcontext.load_cert_chain(cert_path, key_path)
+    password = input("Enter SSL key password: ")
+    sslcontext.load_cert_chain(cert_path, key_path, password=password)
     main.run()
     web.run_app(app, ssl_context=sslcontext)
     print("EXITING...")
