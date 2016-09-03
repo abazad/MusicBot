@@ -1,7 +1,7 @@
 import asyncio
-import json
 import logging
 import os
+import sqlite3
 import threading
 import uuid
 
@@ -9,6 +9,7 @@ import falcon
 import hug
 import jwt
 from passlib.hash import bcrypt_sha256
+from pylru import lrudecorator
 
 from musicbot.music_apis import Song, AbstractSongProvider, AbstractAPI
 
@@ -97,36 +98,48 @@ def _create_token(secrets):
     return token
 
 
-def _read_secrets():
-    path = "config/rest_secrets.json"
+def _read_secrets(secrets_password):
+    path = "config/rest_bot.secrets"
     if not os.path.isfile(path):
-        empty_secrets = {"token": "", "clients": []}
-        token = _create_token(empty_secrets)
-        with open(path, 'w') as secrets_file:
-            secrets_file.write(json.dumps(empty_secrets))
-        return token, dict(), set()
-    with open(path, 'r') as secrets_file:
-        secrets = json.loads(secrets_file.read())
+        empty_secrets = {"token": ""}
+        _create_token(empty_secrets)
+        encoded_token = jwt.encode(empty_secrets, secrets_password, algorithm="HS256")
+        with open(path, 'wb') as secrets_file:
+            secrets_file.write(encoded_token)
+        return encoded_token
+    with open(path, 'rb') as secrets_file:
+        secrets_content = secrets_file.read()
+        secrets = jwt.decode(secrets_content, secrets_password, algorithm="HS256")
         token = secrets['token']
-        json_clients = secrets['clients']
-        client_list = map(_SecretClient.from_json, json_clients)
-        clients = {}
-        client_names = set()
-        for client in client_list:
-            clients[client.name] = client
-            client_names.add(client.name)
-        return token, clients, client_names
+        return token
+
+
+def _get_db_conn():
+    return sqlite3.connect("config/clients.db")
+
+
+@lrudecorator(256)
+def _get_client(username):
+    with _get_db_conn() as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT pw_hash, permissions FROM clients WHERE username=?", [username])
+        client_row = cursor.fetchone()
+        if not client_row:
+            return None
+        pw_hash = client_row['pw_hash']
+        permissions = client_row['permissions'].split(",")
+        return _SecretClient(username, pw_hash, permissions)
 
 
 def _add_client(client):
     with _add_client_lock:
-        if clients.name in clients:
+        if _get_client(client.name):
             raise ValueError("client already in clients")
-        clients[client.name] = client
-        client_names.add(client.name)
-        secrets_json = {"token": token, "clients": list(map(_SecretClient.to_json, clients.values()))}
-        with open("config/rest_secrets.json", 'w') as secrets_file:
-            secrets_file.write(json.dumps(secrets_json))
+        with _get_db_conn() as db:
+            db.execute("INSERT INTO clients(username, pw_hash, permissions) VALUES(?, ?, ?)",
+                       (client.name,
+                        client.pw_hash,
+                        ",".join(client.permissions)))
 
 
 _add_client_lock = threading.Lock()
@@ -134,25 +147,34 @@ player = None
 queue = []
 music_api_names = {}
 apis_json = []
-token, clients, client_names = _read_secrets()
+token = None
 
 logger = logging.getLogger("musicbot")
 
+with _get_db_conn() as db:
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS clients (userid INTEGER PRIMARY KEY ASC AUTOINCREMENT, username VARCHAR(64) UNIQUE NOT NULL, pw_hash CHAR(75) NOT NULL, permissions VARCHAR(64))")
 
-def init(music_apis, queued_player):
-    '''
+
+def init(music_apis, queued_player, secrets_password):
+    """
     Keyword arguments:
     music_apis -- a list of AbstractAPIs
     queued_player -- a Player instance
-    '''
+    """
     global music_api_names
     global apis_json
     global player
     global queue
+    global token
     music_api_names = {api.get_name(): api for api in music_apis}
     apis_json = list(map(lambda music_api: _API(music_api).to_json(), music_apis))
     player = queued_player
     queue = player.get_queue()
+    try:
+        token = _read_secrets(secrets_password)
+    except jwt.InvalidTokenError:
+        raise ValueError("Invalid password")
 
 
 def verify(user_token):
@@ -170,7 +192,11 @@ def register(username, password, response=None):
     if not username or not username.strip():
         response.status = falcon.HTTP_BAD_REQUEST
         return "Empty username"
-    if username in client_names:
+    username = username.strip().lower()
+    if len(username) > 64:
+        response.status = falcon.HTTP_UNPROCESSABLE_ENTITY
+        return "Username too long"
+    if _get_client(username):
         response.status = falcon.HTTP_CONFLICT
         return "Name already in use"
 
@@ -193,10 +219,20 @@ def register(username, password, response=None):
 
 @hug.put()
 def login(username, password, response=None):
-    if username not in client_names:
+    """
+    Logs user in. Returns status 400 response if user doesn't exist or password is wrong.
+    :param username: a username
+    :param password: a password
+    :return: a token to authenticate with
+    """
+    if not username or not username.strip():
+        response.status = falcon.HTTP_400
+        return "empty username"
+    username = username.strip().lower()
+    client = _get_client(username)
+    if not client:
         response.status = falcon.HTTP_400
         return "unknown"
-    client = clients[username]
     success = bcrypt_sha256.verify(password, client.pw_hash)
     if not success:
         response.status = falcon.HTTP_400

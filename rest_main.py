@@ -8,7 +8,8 @@ from aiohttp_wsgi import WSGIHandler
 import main
 from musicbot import rest_api
 
-rest_api.init(main.apis, main.queued_player)
+secrets_password = input("Enter password for secrets: ")
+rest_api.init(main.apis, main.queued_player, secrets_password)
 
 cert_path = "config/ssl.cert"
 key_path = "config/ssl.key"
