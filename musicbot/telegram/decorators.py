@@ -6,6 +6,7 @@ from musicbot.telegram.user import User
 def plugin_command(func):
     def _command(_, *args):
         return func(*args)
+
     return _command
 
 
@@ -16,6 +17,7 @@ def admin_command(func):
         else:
             bot.send_message(chat_id=update.message.chat_id, text="This command is for admins only")
             return None
+
     return _command
 
 
@@ -39,7 +41,6 @@ def password_protected_command(func):
 def queue_action_command(question="What song?", min_len=1, song_queue=None):
     def _decorator(func):
         def _command(self, bot, update):
-
             chat_id = update.message.chat_id
             player = self._player
             queue = song_queue or player.get_queue()
@@ -59,7 +60,9 @@ def queue_action_command(question="What song?", min_len=1, song_queue=None):
 
             keyboard_items = self.get_queue_keyboard_items(queue)
             self.send_callback_keyboard(bot, chat_id, question, keyboard_items, _action)
+
         return _command
+
     return _decorator
 
 
@@ -74,6 +77,7 @@ def keyboard_answer_handler(func):
         else:
             logging.getLogger("musicbot").debug("INVALID CHOICE: %s", c)
             return False
+
     return _handler
 
 
@@ -86,4 +90,5 @@ def callback_keyboard_answer_handler(func):
             logging.getLogger("musicbot").debug("missing data for callback query")
             return True
         return func(chat_id, data)
+
     return _handler

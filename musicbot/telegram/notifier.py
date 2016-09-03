@@ -1,9 +1,9 @@
 from telegram.inlinekeyboardbutton import InlineKeyboardButton
+
 from musicbot.telegram import decorators
 
 
 class _Subscriber(object):
-
     def __init__(self, chat_id, bot, silent=False):
         self.chat_id = chat_id
         self._bot = bot
@@ -21,7 +21,6 @@ class _Subscriber(object):
 
 
 class Subscribable(object):
-
     def subscribe(self, bot, update):
         chat_id = update.message.chat_id
 

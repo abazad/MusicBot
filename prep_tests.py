@@ -2,8 +2,6 @@ import json
 import logging
 import os
 
-import test_logger
-
 
 def save_secrets():
     with open("config/secrets.json", 'r') as secrets_file:
@@ -29,6 +27,7 @@ def save_secrets():
     logger.info("Writing secrets to secrets.json")
     with open("config/secrets.json", 'w') as secrets_file:
         secrets_file.write(json.dumps(secrets))
+
 
 if __name__ == '__main__':
     save_secrets()

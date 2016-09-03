@@ -1,5 +1,4 @@
 class User(object):
-
     def __init__(self, **kwargs):
         if "user" in kwargs:
             user = kwargs['user']

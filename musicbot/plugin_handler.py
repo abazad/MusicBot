@@ -4,7 +4,6 @@ import os
 
 from colorama import Fore
 
-
 plugin_dir = "./plugins"
 
 

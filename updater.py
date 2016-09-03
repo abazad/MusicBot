@@ -19,7 +19,7 @@ def _go_through_files(cur_dir, data, repo_name, bw_list, is_whitelist, logger):
             continue
 
         # if there is a directory go through it per recursive call
-        if(content["type"] == "dir"):
+        if (content["type"] == "dir"):
             logger.debug("file is directory")
             os.makedirs(path, exist_ok=True)
             resp = requests.get(url=content['url'])

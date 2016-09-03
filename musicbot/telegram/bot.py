@@ -3,11 +3,11 @@ import logging
 import os
 import signal
 import socket
-from threading import Thread
 import time
+from threading import Thread
 
-from pylru import lrucache
 import telegram
+from pylru import lrucache
 from telegram.ext import dispatcher
 from telegram.ext import updater
 from telegram.ext.callbackqueryhandler import CallbackQueryHandler
@@ -33,7 +33,6 @@ def get_ip_address():
 
 
 class TelegramOptions(object):
-
     def __init__(self, config_dir):
         self._config_dir = config_dir
         self._load_config()
@@ -76,7 +75,6 @@ class TelegramOptions(object):
 
 
 class TelegramBot(notifier.Subscribable):
-
     def __init__(self, options, token, plugins, music_api, song_provider, player):
         self._options = options
         self._music_api = music_api
@@ -479,6 +477,7 @@ class TelegramBot(notifier.Subscribable):
         def _exit():
             time.sleep(1)
             os.kill(os.getpid(), signal.SIGINT)
+
         Thread(name="EXIT_THREAD", target=_exit).start()
 
     @dispatcher.run_async
@@ -540,7 +539,8 @@ class TelegramBot(notifier.Subscribable):
 
         text = "Who should be banned?"
         keyboard_items = list(
-            map(lambda client: InlineKeyboardButton(text=client.name, callback_data=str(client.user_id)), self._options.clients))
+            map(lambda client: InlineKeyboardButton(text=client.name, callback_data=str(client.user_id)),
+                self._options.clients))
 
         @decorators.callback_keyboard_answer_handler
         def _action(chat_id, data):
@@ -572,6 +572,7 @@ class TelegramBot(notifier.Subscribable):
         def _exit():
             time.sleep(1)
             os.kill(os.getpid(), signal.SIGINT)
+
         Thread(name="EXIT_THREAD", target=_exit).start()
 
     @dispatcher.run_async

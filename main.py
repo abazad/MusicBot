@@ -1,16 +1,15 @@
-from _signal import SIGINT
-from datetime import datetime
 import json
 import logging
 import os
 import sys
+from _signal import SIGINT
+from datetime import datetime
 
 import colorama
 
 from musicbot import music_apis, player
 from musicbot.plugin_handler import PluginLoader
 from musicbot.telegram import bot
-
 
 # Initialize colorama for colored output
 colorama.init()
@@ -73,13 +72,13 @@ with open(os.path.join(config_dir, "config.json"), 'r') as config_file:
 if config.get("auto_updates", False):
     logger.info("Checking for updates...")
     import updater
+
     if updater.update():
         logger.info("Restarting after update...")
         os.execl(sys.executable, sys.executable, *sys.argv)
         sys.exit(0)
     else:
         logger.info("No updates found.")
-
 
 apis = []
 
@@ -102,7 +101,6 @@ try:
 except ValueError as e:
     logger.warning("Missing YouTube secrets. (%s)", e)
 
-
 queued_player = player.Player(gmusic_api)
 
 if gmusic_token:
@@ -119,7 +117,7 @@ def run():
     queued_player.run()
 
 
-if(__name__ == "__main__"):
+if (__name__ == "__main__"):
     run()
     gmusic_bot.idle()
     os.kill(os.getpid(), SIGINT)

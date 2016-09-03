@@ -1,15 +1,13 @@
-from _collections_abc import Iterable
 import json
 import logging
 import os
 import unittest
+from _collections_abc import Iterable
 
 from musicbot.music_apis import Song, GMusicAPI, YouTubeAPI, SoundCloudAPI, AbstractAPI
-import test_logger
 
 
 class TestSong(unittest.TestCase):
-
     class _TestAPI(AbstractAPI):
 
         def __init__(self):
@@ -30,7 +28,8 @@ class TestSong(unittest.TestCase):
                 Song("testid", api, "testtitle", "testdescription", albumArtUrl="testurl"),
                 Song("testid", api, str_rep="testrep", albumArtUrl="testurl"),
                 Song("testid", api, "testtitle", "testdescription", str_rep="testrep", albumArtUrl="testurl"),
-                Song("testid", api, "testtitle", "testdescription", str_rep="testrep", albumArtUrl="testurl", duration="42:42")]
+                Song("testid", api, "testtitle", "testdescription", str_rep="testrep", albumArtUrl="testurl",
+                     duration="42:42")]
 
     def test_init_missing_required(self):
         with self.assertRaises(ValueError):
@@ -62,7 +61,6 @@ class TestSong(unittest.TestCase):
 
 
 class APITest(object):
-
     def test_search_song(self):
         songs = self.api.search_song("kassierer")
         self.assertTrue(songs)
@@ -93,7 +91,6 @@ class APITest(object):
 
 
 class SongProviderTest(object):
-
     def test_get_song(self):
         api = self.api
         for _ in range(0, 20):
@@ -121,7 +118,6 @@ class SongProviderTest(object):
 
 
 class TestGMusicAPI(unittest.TestCase, APITest, SongProviderTest):
-
     @classmethod
     def setUpClass(cls):
         config_dir = "config"
@@ -160,7 +156,6 @@ class TestGMusicAPI(unittest.TestCase, APITest, SongProviderTest):
 
 
 class TestYoutubeAPI(unittest.TestCase, APITest):
-
     @classmethod
     def setUpClass(cls):
         config_dir = "config"
@@ -184,7 +179,6 @@ class TestYoutubeAPI(unittest.TestCase, APITest):
 
 
 class TestSoundCloudAPI(unittest.TestCase, APITest):
-
     @classmethod
     def setUpClass(cls):
         config_dir = "config"

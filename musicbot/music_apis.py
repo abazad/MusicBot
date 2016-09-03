@@ -1,4 +1,3 @@
-from datetime import datetime
 import json
 import locale
 import logging
@@ -7,15 +6,15 @@ import socket
 import threading
 import time
 import urllib
+from datetime import datetime
 
+import pylru
 from gmusicapi.clients.mobileclient import Mobileclient
 from gmusicapi.exceptions import CallFailure
 from pydub import AudioSegment, effects
-import pylru
 
 
 class Song(object):
-
     def __init__(self, song_id, api, title=None, description=None, albumArtUrl=None, str_rep=None, duration=None):
         '''
         Constructor
@@ -131,7 +130,6 @@ class Song(object):
 
 
 class AbstractAPI(object):
-
     _download_semaphore = None
     _conversion_semaphore = None
 
@@ -194,6 +192,7 @@ class AbstractAPI(object):
         native_format -- the native format the downloaded file will have (file extension), can be a function
         download -- a function accepting only a target path which downloads the song with the song_id
         '''
+
         def _loader():
             if isinstance(native_format, str):
                 _native_format = native_format
@@ -260,6 +259,7 @@ class AbstractAPI(object):
             event.set()
             loading_ids_lock.release()
             return fname
+
         return _loader
 
     @classmethod
@@ -272,7 +272,6 @@ class AbstractAPI(object):
 
 
 class AbstractSongProvider(AbstractAPI):
-
     def __init__(self, config_dir, config):
         super().__init__(config_dir, config)
 

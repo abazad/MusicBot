@@ -56,7 +56,6 @@ class _API(object):
 
 
 class _SecretClient(object):
-
     def __init__(self, name, pw_hash, permissions):
         self.name = name
         self.pw_hash = pw_hash
@@ -160,6 +159,7 @@ def verify(user_token):
     except (KeyError, jwt.InvalidTokenError):
         return False
 
+
 authentication = hug.authentication.token(verify)
 
 
@@ -207,7 +207,7 @@ def music_apis():
 
 @asyncio.coroutine
 @hug.put(requires=authentication)
-def queue(body, remove: hug.types.boolean=False, response=None):
+def queue(body, remove: hug.types.boolean = False, response=None):
     try:
         song = Song.from_json(body, music_api_names)
     except ValueError as e:
@@ -227,7 +227,7 @@ def queue(body, remove: hug.types.boolean=False, response=None):
 
 @asyncio.coroutine
 @hug.get()
-def suggestions(api_name, max_fetch: hug.types.number=10, response=None):
+def suggestions(api_name, max_fetch: hug.types.number = 10, response=None):
     max_fetch = min(10, max(1, max_fetch))
 
     try:
@@ -245,7 +245,7 @@ def suggestions(api_name, max_fetch: hug.types.number=10, response=None):
 
 @asyncio.coroutine
 @hug.get()
-def search(api_name, query, max_fetch: hug.types.number=50, response=None):
+def search(api_name, query, max_fetch: hug.types.number = 50, response=None):
     max_fetch = min(50, max(1, max_fetch))
     try:
         api = music_api_names[api_name]
@@ -292,7 +292,7 @@ def next_song():
 
 @asyncio.coroutine
 @hug.put(requires=authentication)
-def move(moving_song_json, other_song_json, after_other: hug.types.boolean=False, response=None):
+def move(moving_song_json, other_song_json, after_other: hug.types.boolean = False, response=None):
     try:
         moving_song = Song.from_json(moving_song_json, music_api_names)
         other_song = Song.from_json(other_song_json, music_api_names)

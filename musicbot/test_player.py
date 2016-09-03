@@ -3,11 +3,9 @@ import unittest
 
 from musicbot.music_apis import Song, AbstractSongProvider
 from musicbot.player import SongQueue
-import test_logger
 
 
 class TestSongProvider(AbstractSongProvider):
-
     def __init__(self, loader):
         self._loader = loader
         self.counter = 0
@@ -34,11 +32,11 @@ class TestSongProvider(AbstractSongProvider):
 
 
 class TestSongQueue(unittest.TestCase):
-
     @classmethod
     def _loader(cls, song_id):
         def _loader():
             return song_id + ".wav"
+
         return _loader
 
     def setUp(self):

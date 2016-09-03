@@ -8,12 +8,11 @@ from aiohttp_wsgi import WSGIHandler
 import main
 from musicbot import rest_api
 
-
 rest_api.init(main.apis, main.queued_player)
 
 cert_path = "config/ssl.cert"
 key_path = "config/ssl.key"
-if not(os.path.isfile(cert_path) and os.path.isfile(key_path)):
+if not (os.path.isfile(cert_path) and os.path.isfile(key_path)):
     print("MISSING SSL FILES (ssl.cert and ssl.key in config directory)")
     os.kill(os.getpid(), signal.SIGINT)
 

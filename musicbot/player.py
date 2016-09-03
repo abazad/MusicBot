@@ -1,14 +1,13 @@
-from concurrent.futures.thread import ThreadPoolExecutor
 import logging
 import threading
 import time
+from concurrent.futures.thread import ThreadPoolExecutor
 
 from musicbot.music_apis import AbstractSongProvider
 from musicbot.telegram.notifier import Notifier, Cause
 
 
 class SongQueue(list):
-
     def __init__(self, song_provider):
         super().__init__()
         self._stop_preparing = False
@@ -66,7 +65,6 @@ class SongQueue(list):
 
 
 class Player(object):
-
     def __init__(self, song_provider):
         import simpleaudio
         self._sa = simpleaudio
@@ -161,6 +159,7 @@ class Player(object):
                     self._on_song_end()
                     self._next_chosen_event = threading.Event()
                     self._player.wait_done()
+
         threading.Thread(name="player_thread", target=_run).start()
 
     def close(self):

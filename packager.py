@@ -4,7 +4,6 @@ from zipfile import ZipFile
 
 import _version
 
-
 whitelist = ["config", "musicbot", "LICENSE", "main.py", "rest_main.py", "requirements.txt", "updater.py"]
 
 
