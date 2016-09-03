@@ -179,6 +179,7 @@ def register(username, password, response=None):
     client = _SecretClient(username, pw_hash, ["user"])
     _add_client(client)
     user_token = {
+        "name": username,
         "permissions": client.permissions
     }
     return jwt.encode(user_token, token, algorithm="HS256")
@@ -195,6 +196,7 @@ def login(username, password, response=None):
         response.status = falcon.HTTP_400
         return "wrong password"
     user_token = {
+        "name": username,
         "permissions": client.permissions
     }
     return jwt.encode(user_token, token, algorithm="HS256")
