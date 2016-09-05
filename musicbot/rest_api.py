@@ -57,6 +57,27 @@ class _API(object):
         return hash(self.api_name)
 
 
+class _Permission(object):
+    def __init__(self, name, description):
+        self.name = name
+        self.description = description
+
+    def to_json(self):
+        return {
+            "name": self.name,
+            "description": self.description
+        }
+
+    @staticmethod
+    def from_json(perm_json):
+        try:
+            name = perm_json['name']
+            description = perm_json['description']
+        except KeyError:
+            return ValueError("Missing key in json")
+        return _Permission(name, description)
+
+
 class _SecretClient(object):
     def __init__(self, name, pw_hash, permissions):
         self.name = name
@@ -94,10 +115,23 @@ def _create_token(secrets):
     '''
     Create a string token, write it to secrets['token'] and return it.
     '''
-    print("CREATING TOKEN")
     token = str(uuid.uuid4())
     secrets['token'] = token
     return token
+
+
+def _create_user_token(username, permissions):
+    """
+    Creates an encoded user token.
+    :param username: the username
+    :param permissions: a list of permissions (strings)
+    :return: the encoded token
+    """
+    user_token = {
+        "name": username,
+        "permissions": permissions
+    }
+    return jwt.encode(user_token, token, algorithm="HS256")
 
 
 def _read_secrets(secrets_password):
@@ -144,6 +178,13 @@ def _add_client(client):
                         ",".join(client.permissions)))
 
 
+available_permissions = [
+    _Permission("mod", "all admin permissions, except exit, reset and granting permissions"),
+    _Permission("queue_remove", "remove a song from the queue"),
+    _Permission("exit", "shut the bot down"),
+    _Permission("reset", "reset all bot settings, delete the remote playlist and shut the program down")
+]
+
 _add_client_lock = threading.Lock()
 player = None
 queue = []
@@ -156,7 +197,6 @@ logger = logging.getLogger("musicbot")
 with _get_db_conn() as db:
     db.execute(
         "CREATE TABLE IF NOT EXISTS clients (userid INTEGER PRIMARY KEY ASC AUTOINCREMENT, username TEXT UNIQUE NOT NULL, pw_hash CHAR(75) NOT NULL, permissions TEXT)")
-
 
 with open("config/config.json", 'r') as config_file:
     config = json.loads(config_file.read())
@@ -194,15 +234,6 @@ def verify(user_token):
 authentication = hug.authentication.token(verify)
 
 
-def is_authorized(user, needed=["admin"]):
-    """
-    Ensures that a user has one of the needed permissions.
-    :param needed: an iterable of permissions
-    :return: True or False
-    """
-    return not set(user['permissions']).isdisjoint(set(needed))
-
-
 @hug.post()
 def register(username, password, response=None):
     if not username or not username.strip():
@@ -226,11 +257,7 @@ def register(username, password, response=None):
     except ValueError:
         response.status = falcon.HTTP_CONFLICT
         return "Name already in use"
-    user_token = {
-        "name": username,
-        "permissions": client.permissions
-    }
-    return jwt.encode(user_token, token, algorithm="HS256")
+    return _create_user_token(username, client.permissions)
 
 
 @hug.put()
@@ -253,11 +280,7 @@ def login(username, password, response=None):
     if not success:
         response.status = falcon.HTTP_400
         return "wrong password"
-    user_token = {
-        "name": username,
-        "permissions": client.permissions
-    }
-    return jwt.encode(user_token, token, algorithm="HS256")
+    return _create_user_token(username, client.permissions)
 
 
 @hug.get()
@@ -267,7 +290,7 @@ def music_apis():
 
 @asyncio.coroutine
 @hug.put(requires=authentication)
-def queue(body, remove: hug.types.boolean = False, response=None):
+def queue(body, remove: hug.types.boolean = False, user: hug.directives.user = None, response=None):
     try:
         song = Song.from_json(body, music_api_names)
     except ValueError as e:
@@ -275,6 +298,9 @@ def queue(body, remove: hug.types.boolean = False, response=None):
         return str(e)
 
     if remove:
+        if not has_permission(user, ["admin", "mod", "queue_remove"]):
+            response.status = falcon.HTTP_FORBIDDEN
+            return "Not permitted"
         try:
             queue.remove(song)
         except ValueError as e:
@@ -381,11 +407,16 @@ def move(moving_song_json, other_song_json, after_other: hug.types.boolean = Fal
 @hug.local()
 @asyncio.coroutine
 @hug.get(requires=authentication)
-def has_admin():
+def has_admin(user: hug.directives.user=None):
     """
     Check whether the server has an admin.
+    If there is none and none is allowed, also returns True.
     :return: True or False
     """
+    if not allow_rest_admin:
+        return True
+    if user and ("admin" in user['permissions']):
+        return True
     with _get_db_conn() as db:
         cursor = db.cursor()
         cursor.execute("SELECT permissions FROM clients")
@@ -396,6 +427,7 @@ def has_admin():
         return False
 
 
+@hug.local()
 @hug.get(requires=authentication)
 def is_admin(user: hug.directives.user):
     """
@@ -405,6 +437,28 @@ def is_admin(user: hug.directives.user):
     return "admin" in user['permissions']
 
 
+@hug.local()
+@asyncio.coroutine
+@hug.get(requires=authentication)
+def has_permission(user: hug.directives.user, needed_permissions=["admin"]):
+    """
+    Ensure that a user has at least one of the needed permissions.
+    :param needed_permissions: an iterable of permission strings
+    :return: True or False
+    """
+    return not set(user['permissions']).isdisjoint(set(needed_permissions))
+
+
+@asyncio.coroutine
+@hug.get(requires=authentication)
+def get_permissions(user: hug.directives.user):
+    """
+    Return the permissions of the client.
+    :return: a list of permissions
+    """
+    return user['permissions']
+
+
 claim_admin_lock = threading.Lock()
 
 
@@ -412,7 +466,7 @@ claim_admin_lock = threading.Lock()
 @hug.get(requires=authentication)
 def claim_admin(user: hug.directives.user, response=None):
     """
-    Requests admin rights. If allow_rest_admin is set in config and no other admin exists, returns admin token.
+    Request admin rights. If allow_rest_admin is set in config and no other admin exists, return admin token.
     :return: an admin token on success.
     """
     username = user['name']
@@ -421,15 +475,106 @@ def claim_admin(user: hug.directives.user, response=None):
         response.status = falcon.HTTP_400
         return None
     with claim_admin_lock:
-        if not (allow_rest_admin and not has_admin()):
+        if has_admin():
             response.status = falcon.HTTP_CONFLICT
             return None
         permissions.append("admin")
         permissions = list(set(permissions))
         with _get_db_conn() as db:
             db.execute("UPDATE clients SET permissions=? WHERE username=?", (",".join(permissions), username))
-    admin_token = {
-        "name": username,
-        "permissions": permissions
-    }
-    return jwt.encode(admin_token, token, algorithm="HS256")
+    return _create_user_token(username, permissions)
+
+
+@hug.local()
+@asyncio.coroutine
+@hug.get(requires=authentication)
+def get_available_permissions(user: hug.directives.user=None, response=None):
+    """
+    Return a list of available permissions an admin can grant to users.
+    Needs admin permission.
+    :return: a list of permissions
+    """
+    if user and (not is_admin(user)):
+        response.status = falcon.HTTP_FORBIDDEN
+        return None
+    return available_permissions
+
+
+@hug.local()
+@asyncio.coroutine
+@hug.get(requires=authentication)
+def get_users(user: hug.directives.user=None, response=None):
+    """
+    Return a list of all registered users with their permissions.
+    Needs admin permission.
+    :return: a list of users or None
+    """
+    if user and (not is_admin(user)):
+        response.status = falcon.HTTP_FORBIDDEN
+        return None
+    with _get_db_conn() as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT username, permissions FROM clients")
+        result = []
+        for row in cursor.fetchall():
+            result.append({
+                "username": row[0],
+                "permissions": row[1].split(",")
+            })
+        return result
+
+
+@asyncio.coroutine
+@hug.put(requires=authentication)
+def grant_permission(target_username, permission: hug.types.json, user: hug.directives.user = None, response=None):
+    """
+    Grant a permission to a user
+    Note that the new permissions only apply after the user logged out and in again.
+    Needs admin permission.
+    :param target_username: the username of the user the permission should be granted
+    :param permission: the permission as returned by get_permissions
+    :return: 'OK', error message or None
+    """
+    if not is_admin(user):
+        response.status = falcon.HTTP_FORBIDDEN
+        return None
+    target_username = target_username.strip().lower()
+    client = _get_client(target_username)
+    if not client:
+        response.status = falcon.HTTP_400
+        return "unknown target user"
+    permissions = client.permissions
+    permissions.append(permission)
+    permissions = list(set(permissions))
+    with _get_db_conn() as db:
+        db.execute("UPDATE clients SET permissions=? WHERE username=?", [",".join(permissions), target_username])
+    return "OK"
+
+
+@asyncio.coroutine
+@hug.put(requires=authentication)
+def revoke_permission(target_username, permission: hug.types.json, user: hug.directives.user = None, response=None):
+    """
+    Revokes a granted permission.
+    Note that the new permissions only apply after the user logged out and in again.
+    Needs admin permission.
+    :param target_username: the username of the user whos permission should be revoked
+    :param permission: the permission as returned by get_permissions
+    :return: 'OK' or error_message or None
+    """
+    if not is_admin(user):
+        response.status = falcon.HTTP_FORBIDDEN
+        return None
+    target_username = target_username.strip().lower()
+    client = _get_client(target_username)
+    if not client:
+        response.status = falcon.HTTP_400
+        return "unknown target user"
+    permissions = client.permissions
+    try:
+        permissions.remove(permission)
+    except ValueError:
+        pass
+    with _get_db_conn() as db:
+        db.execute("UPDATE clients SET permissions=? WHERE username=?", [",".join(permissions), target_username])
+    return "OK"
