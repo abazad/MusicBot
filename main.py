@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import sys
-from _signal import SIGINT
+from signal import SIGINT
 from datetime import datetime
 
 import colorama
