@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import sqlite3
@@ -93,6 +94,7 @@ def _create_token(secrets):
     '''
     Create a string token, write it to secrets['token'] and return it.
     '''
+    print("CREATING TOKEN")
     token = str(uuid.uuid4())
     secrets['token'] = token
     return token
@@ -126,8 +128,8 @@ def _get_client(username):
         client_row = cursor.fetchone()
         if not client_row:
             return None
-        pw_hash = client_row['pw_hash']
-        permissions = client_row['permissions'].split(",")
+        pw_hash = client_row[0]
+        permissions = client_row[1].split(",")
         return _SecretClient(username, pw_hash, permissions)
 
 
@@ -153,7 +155,12 @@ logger = logging.getLogger("musicbot")
 
 with _get_db_conn() as db:
     db.execute(
-        "CREATE TABLE IF NOT EXISTS clients (userid INTEGER PRIMARY KEY ASC AUTOINCREMENT, username VARCHAR(64) UNIQUE NOT NULL, pw_hash CHAR(75) NOT NULL, permissions VARCHAR(64))")
+        "CREATE TABLE IF NOT EXISTS clients (userid INTEGER PRIMARY KEY ASC AUTOINCREMENT, username TEXT UNIQUE NOT NULL, pw_hash CHAR(75) NOT NULL, permissions TEXT)")
+
+
+with open("config/config.json", 'r') as config_file:
+    config = json.loads(config_file.read())
+    allow_rest_admin = config.get("allow_rest_admin", True)
 
 
 def init(music_apis, queued_player, secrets_password):
@@ -185,6 +192,15 @@ def verify(user_token):
 
 
 authentication = hug.authentication.token(verify)
+
+
+def is_authorized(user, needed=["admin"]):
+    """
+    Ensures that a user has one of the needed permissions.
+    :param needed: an iterable of permissions
+    :return: True or False
+    """
+    return not set(user['permissions']).isdisjoint(set(needed))
 
 
 @hug.post()
@@ -304,6 +320,7 @@ def search(api_name, query, max_fetch: hug.types.number = 50, response=None):
     return list(map(Song.to_json, api.search_song(query, max_fetch=max_fetch)))
 
 
+@hug.local()
 @hug.get()
 def player_state():
     current_song = player.get_current_song()
@@ -359,3 +376,60 @@ def move(moving_song_json, other_song_json, after_other: hug.types.boolean = Fal
     except ValueError:
         response.status = falcon.HTTP_400
         return "song {} is not in queue".format(other_song)
+
+
+@hug.local()
+@asyncio.coroutine
+@hug.get(requires=authentication)
+def has_admin():
+    """
+    Check whether the server has an admin.
+    :return: True or False
+    """
+    with _get_db_conn() as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT permissions FROM clients")
+        rows = cursor.fetchall()
+        for row in rows:
+            if "admin" in row[0].split(","):
+                return True
+        return False
+
+
+@hug.get(requires=authentication)
+def is_admin(user: hug.directives.user):
+    """
+    Check whether the the calling user is admin
+    :return: True or False
+    """
+    return "admin" in user['permissions']
+
+
+claim_admin_lock = threading.Lock()
+
+
+@asyncio.coroutine
+@hug.get(requires=authentication)
+def claim_admin(user: hug.directives.user, response=None):
+    """
+    Requests admin rights. If allow_rest_admin is set in config and no other admin exists, returns admin token.
+    :return: an admin token on success.
+    """
+    username = user['name']
+    permissions = user['permissions']
+    if "admin" in permissions:
+        response.status = falcon.HTTP_400
+        return None
+    with claim_admin_lock:
+        if not (allow_rest_admin and not has_admin()):
+            response.status = falcon.HTTP_CONFLICT
+            return None
+        permissions.append("admin")
+        permissions = list(set(permissions))
+        with _get_db_conn() as db:
+            db.execute("UPDATE clients SET permissions=? WHERE username=?", (",".join(permissions), username))
+    admin_token = {
+        "name": username,
+        "permissions": permissions
+    }
+    return jwt.encode(admin_token, token, algorithm="HS256")
