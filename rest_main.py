@@ -1,6 +1,7 @@
 import os
 import signal
 import ssl
+from getpass import getpass
 
 from aiohttp import web
 from aiohttp_wsgi import WSGIHandler
@@ -8,7 +9,7 @@ from aiohttp_wsgi import WSGIHandler
 import main
 from musicbot import rest_api
 
-secrets_password = input("Enter password for secrets: ")
+secrets_password = getpass("Enter password for secrets: ")
 rest_api.init(main.apis, main.queued_player, secrets_password)
 
 cert_path = "config/ssl.cert"
@@ -23,7 +24,7 @@ try:
     app.router.add_route("*", "/{path_info:.*}", wsgi_handler)
     sslcontext = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
 
-    password = input("Enter SSL key password: ")
+    password = getpass("Enter SSL key password: ")
     sslcontext.load_cert_chain(cert_path, key_path, password=password)
     main.run()
     web.run_app(app, ssl_context=sslcontext)
