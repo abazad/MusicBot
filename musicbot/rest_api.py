@@ -2,8 +2,10 @@ import asyncio
 import json
 import logging
 import os
+import signal
 import sqlite3
 import threading
+import time
 import uuid
 
 import falcon
@@ -407,7 +409,7 @@ def move(moving_song_json, other_song_json, after_other: hug.types.boolean = Fal
 @hug.local()
 @asyncio.coroutine
 @hug.get(requires=authentication)
-def has_admin(user: hug.directives.user=None):
+def has_admin(user: hug.directives.user = None):
     """
     Check whether the server has an admin.
     If there is none and none is allowed, also returns True.
@@ -488,7 +490,7 @@ def claim_admin(user: hug.directives.user, response=None):
 @hug.local()
 @asyncio.coroutine
 @hug.get(requires=authentication)
-def get_available_permissions(user: hug.directives.user=None, response=None):
+def get_available_permissions(user: hug.directives.user = None, response=None):
     """
     Return a list of available permissions an admin can grant to users.
     Needs admin permission.
@@ -503,7 +505,7 @@ def get_available_permissions(user: hug.directives.user=None, response=None):
 @hug.local()
 @asyncio.coroutine
 @hug.get(requires=authentication)
-def get_users(user: hug.directives.user=None, response=None):
+def get_users(user: hug.directives.user = None, response=None):
     """
     Return a list of all registered users with their permissions.
     Needs admin permission.
@@ -577,4 +579,40 @@ def revoke_permission(target_username, permission: hug.types.json, user: hug.dir
         pass
     with _get_db_conn() as db:
         db.execute("UPDATE clients SET permissions=? WHERE username=?", [",".join(permissions), target_username])
+    return "OK"
+
+
+def _exit():
+    time.sleep(2)
+    os.kill(os.getpid(), signal.SIGINT)
+
+
+@asyncio.coroutine
+@hug.put(requires=authentication)
+def exit_bot(user: hug.directives.user, response=None):
+    if not has_permission(user, ["admin", "exit"]):
+        response.status = falcon.HTTP_FORBIDDEN
+        return None
+    player.close()
+
+    threading.Thread(target=_exit).start()
+    return "OK"
+
+
+@asyncio.coroutine
+@hug.put(requires=authentication)
+def reset_bot(user: hug.directives.user, response=None):
+    if not has_permission(user, []):
+        response.status = falcon.HTTP_FORBIDDEN
+        return None
+    player.close()
+    for api_name in music_api_names:
+        api = music_api_names[api_name]
+        if isinstance(api, AbstractSongProvider):
+            api.reset()
+
+    os.remove("config/clients.db")
+    os.remove("config/rest_bot.secrets")
+
+    threading.Thread(target=_exit).start()
     return "OK"
