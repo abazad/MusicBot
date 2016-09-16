@@ -1,8 +1,6 @@
 import asyncio
-import json
 import logging
 import os
-import signal
 import sqlite3
 import threading
 import time
@@ -14,6 +12,8 @@ import jwt
 from passlib.hash import bcrypt_sha256
 from pylru import lrudecorator
 
+from musicbot import async_handler
+from musicbot import config
 from musicbot.music_apis import Song, AbstractSongProvider, AbstractAPI
 
 
@@ -115,10 +115,10 @@ class _SecretClient(object):
 
 def _create_token(secrets):
     '''
-    Create a string token, write it to secrets['token'] and return it.
+    Create a string token, write it to secrets['rest_token'] and return it.
     '''
     token = str(uuid.uuid4())
-    secrets['token'] = token
+    secrets['rest_token'] = token
     return token
 
 
@@ -136,20 +136,14 @@ def _create_user_token(username, permissions):
     return jwt.encode(user_token, token, algorithm="HS256")
 
 
-def _read_secrets(secrets_password):
-    path = "config/rest_bot.secrets"
-    if not os.path.isfile(path):
-        empty_secrets = {"token": ""}
-        _create_token(empty_secrets)
-        encoded_token = jwt.encode(empty_secrets, secrets_password, algorithm="HS256")
-        with open(path, 'wb') as secrets_file:
-            secrets_file.write(encoded_token)
-        return encoded_token
-    with open(path, 'rb') as secrets_file:
-        secrets_content = secrets_file.read()
-        secrets = jwt.decode(secrets_content, secrets_password, algorithm="HS256")
-        token = secrets['token']
-        return token
+def _read_secrets():
+    secrets = config.get_secrets()
+    if "rest_token" in secrets:
+        return secrets['rest_token']
+    else:
+        result = _create_token(secrets)
+        config.save_secrets()
+        return result
 
 
 def _get_db_conn():
@@ -158,7 +152,8 @@ def _get_db_conn():
 
 @lrudecorator(256)
 def _get_client(username):
-    with _get_db_conn() as db:
+    db = _get_db_conn()
+    try:
         cursor = db.cursor()
         cursor.execute("SELECT pw_hash, permissions FROM clients WHERE username=?", [username])
         client_row = cursor.fetchone()
@@ -167,17 +162,22 @@ def _get_client(username):
         pw_hash = client_row[0]
         permissions = client_row[1].split(",")
         return _SecretClient(username, pw_hash, permissions)
+    finally:
+        db.close()
 
 
 def _add_client(client):
     with _add_client_lock:
         if _get_client(client.name):
             raise ValueError("client already in clients")
-        with _get_db_conn() as db:
+        db = _get_db_conn()
+        try:
             db.execute("INSERT INTO clients(username, pw_hash, permissions) VALUES(?, ?, ?)",
                        (client.name,
                         client.pw_hash,
                         ",".join(client.permissions)))
+        finally:
+            db.close()
 
 
 available_permissions = [
@@ -196,16 +196,13 @@ token = None
 
 logger = logging.getLogger("musicbot")
 
-with _get_db_conn() as db:
-    db.execute(
-        "CREATE TABLE IF NOT EXISTS clients (userid INTEGER PRIMARY KEY ASC AUTOINCREMENT, username TEXT UNIQUE NOT NULL, pw_hash CHAR(75) NOT NULL, permissions TEXT)")
-
-with open("config/config.json", 'r') as config_file:
-    config = json.loads(config_file.read())
-    allow_rest_admin = config.get("allow_rest_admin", True)
+db = _get_db_conn()
+db.execute(
+    "CREATE TABLE IF NOT EXISTS clients (userid INTEGER PRIMARY KEY ASC AUTOINCREMENT, username TEXT UNIQUE NOT NULL, pw_hash CHAR(75) NOT NULL, permissions TEXT)")
+db.close()
 
 
-def init(music_apis, queued_player, secrets_password):
+def init(music_apis, queued_player):
     """
     Keyword arguments:
     music_apis -- a list of AbstractAPIs
@@ -220,10 +217,7 @@ def init(music_apis, queued_player, secrets_password):
     apis_json = list(map(lambda music_api: _API(music_api).to_json(), music_apis))
     player = queued_player
     queue = player.get_queue()
-    try:
-        token = _read_secrets(secrets_password)
-    except jwt.InvalidTokenError:
-        raise ValueError("Invalid password")
+    token = _read_secrets()
 
 
 def verify(user_token):
@@ -415,11 +409,12 @@ def has_admin(user: hug.directives.user = None):
     If there is none and none is allowed, also returns True.
     :return: True or False
     """
-    if not allow_rest_admin:
+    if not config.get_allow_rest_admin():
         return True
     if user and ("admin" in user['permissions']):
         return True
-    with _get_db_conn() as db:
+    db = _get_db_conn()
+    try:
         cursor = db.cursor()
         cursor.execute("SELECT permissions FROM clients")
         rows = cursor.fetchall()
@@ -427,6 +422,8 @@ def has_admin(user: hug.directives.user = None):
             if "admin" in row[0].split(","):
                 return True
         return False
+    finally:
+        db.close()
 
 
 @hug.local()
@@ -482,8 +479,11 @@ def claim_admin(user: hug.directives.user, response=None):
             return None
         permissions.append("admin")
         permissions = list(set(permissions))
-        with _get_db_conn() as db:
+        db = _get_db_conn()
+        try:
             db.execute("UPDATE clients SET permissions=? WHERE username=?", (",".join(permissions), username))
+        finally:
+            db.close()
     return _create_user_token(username, permissions)
 
 
@@ -514,7 +514,8 @@ def get_users(user: hug.directives.user = None, response=None):
     if user and (not is_admin(user)):
         response.status = falcon.HTTP_FORBIDDEN
         return None
-    with _get_db_conn() as db:
+    db = _get_db_conn()
+    try:
         cursor = db.cursor()
         cursor.execute("SELECT username, permissions FROM clients")
         result = []
@@ -524,6 +525,8 @@ def get_users(user: hug.directives.user = None, response=None):
                 "permissions": row[1].split(",")
             })
         return result
+    finally:
+        db.close()
 
 
 @asyncio.coroutine
@@ -548,8 +551,11 @@ def grant_permission(target_username, permission: hug.types.json, user: hug.dire
     permissions = client.permissions
     permissions.append(permission)
     permissions = list(set(permissions))
-    with _get_db_conn() as db:
+    db = _get_db_conn()
+    try:
         db.execute("UPDATE clients SET permissions=? WHERE username=?", [",".join(permissions), target_username])
+    finally:
+        db.close()
     return "OK"
 
 
@@ -577,14 +583,17 @@ def revoke_permission(target_username, permission: hug.types.json, user: hug.dir
         permissions.remove(permission)
     except ValueError:
         pass
-    with _get_db_conn() as db:
+    db = _get_db_conn()
+    try:
         db.execute("UPDATE clients SET permissions=? WHERE username=?", [",".join(permissions), target_username])
+    finally:
+        db.close()
     return "OK"
 
 
 def _exit():
     time.sleep(2)
-    os.kill(os.getpid(), signal.SIGINT)
+    async_handler.shutdown()
 
 
 @hug.put(requires=authentication)
@@ -592,9 +601,8 @@ def exit_bot(user: hug.directives.user, response=None):
     if not has_permission(user, ["admin", "exit"]):
         response.status = falcon.HTTP_FORBIDDEN
         return None
-    player.close()
 
-    threading.Thread(target=_exit).start()
+    async_handler.submit(_exit)
     return "OK"
 
 
@@ -603,14 +611,14 @@ def reset_bot(user: hug.directives.user, response=None):
     if not has_permission(user, ["admin", "reset"]):
         response.status = falcon.HTTP_FORBIDDEN
         return None
-    player.close()
     for api_name in music_api_names:
         api = music_api_names[api_name]
         if isinstance(api, AbstractSongProvider):
             api.reset()
 
-    # os.remove("config/clients.db")
-    # os.remove("config/rest_bot.secrets")
+    del config.get_secrets()['rest_token']
+    config.save_secrets()
+    os.remove("config/clients.db")
 
-    threading.Thread(target=_exit).start()
+    async_handler.submit(_exit)
     return "OK"

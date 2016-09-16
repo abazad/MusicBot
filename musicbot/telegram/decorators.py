@@ -1,5 +1,6 @@
 import logging
 
+from musicbot import config
 from musicbot.telegram.user import User
 
 
@@ -11,8 +12,11 @@ def plugin_command(func):
 
 
 def admin_command(func):
+    admin_key = "telegram_admin_chat_id"
+    secrets = config.get_secrets()
+
     def _command(self, bot, update):
-        if self._options.admin_chat_id == update.message.chat_id:
+        if admin_key in secrets and (secrets[admin_key] == update.message.chat_id):
             return func(self, bot, update)
         else:
             bot.send_message(chat_id=update.message.chat_id, text="This command is for admins only")
@@ -23,13 +27,12 @@ def admin_command(func):
 
 def password_protected_command(func):
     def _command(self, bot, update):
-        options = self._options
         chat_id = update.message.chat_id
-        if options.enable_password and not options.password:
+        if config.get_telegram_password_enabled() and not self.get_password():
             bot.send_message(chat_id=chat_id, text="Admin hasn't decided which password to use yet")
             return None
         user = User(user=update.message.from_user)
-        if (not options.enable_password) or (user in options.clients):
+        if (not config.get_telegram_password_enabled()) or (user in self.get_clients()):
             return func(self, bot, update)
         else:
             bot.send_message(chat_id=chat_id, text="Please log in with /login [password]")

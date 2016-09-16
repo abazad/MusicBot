@@ -1,13 +1,16 @@
-import json
 import logging
 import os
+import signal
 import sys
-from signal import SIGINT
 from datetime import datetime
+from getpass import getpass
 
 import colorama
 
-from musicbot import music_apis, player
+from musicbot import async_handler
+from musicbot import config
+from musicbot import music_apis
+from musicbot import player
 from musicbot.plugin_handler import PluginLoader
 from musicbot.telegram import bot
 
@@ -42,34 +45,16 @@ error_handler.setLevel(logging.ERROR)
 error_handler.setFormatter(formatter)
 logger.addHandler(error_handler)
 
-# Load config
-config_dir = "config"
-options = bot.TelegramOptions(config_dir)
-
-if options.load_plugins:
-    # Load additional Commands
+# Load additional Telegram Commands
+if config.get_load_plugins_enabled():
     plugin_loader = PluginLoader()
     plugin_loader.load_plugins()
     plugins = plugin_loader.get_plugins()
 else:
     plugins = []
 
-try:
-    with open(options.secrets_path, "r") as secrets_file:
-        secrets = json.loads(secrets_file.read())
-        secrets = {k: str.strip(v) for k, v in secrets.items()}
-
-        gmusic_token = secrets.get("gmusic_bot_token", None)
-        youtube_token = secrets.get("youtube_bot_token", None)
-        soundcloud_token = secrets.get("soundcloud_bot_token", None)
-except IOError:
-    print("Could not open", options.secrets_path)
-    sys.exit(2)
-
-with open(os.path.join(config_dir, "config.json"), 'r') as config_file:
-    config = json.loads(config_file.read())
-
-if config.get("auto_updates", False):
+# Check for updates
+if config.get_auto_updates_enabled():
     logger.info("Checking for updates...")
     import updater
 
@@ -80,44 +65,92 @@ if config.get("auto_updates", False):
     else:
         logger.info("No updates found.")
 
-apis = []
+secrets = config.get_secrets()
 
+music_api_list = []
+
+# Load Telegram Bots
 try:
-    gmusic_api = music_apis.GMusicAPI(config_dir, config, secrets)
-    apis.append(gmusic_api)
+    gmusic_api = music_apis.GMusicAPI()
+    music_api_list.append(gmusic_api)
 except ValueError as e:
-    logger.critical("Missing GMusic secrets. (%s)", e)
+    logger.critical("Error accessing GMusic. (%s)", e)
+    async_handler.shutdown()
     sys.exit(3)
 
 try:
-    soundcloud_api = music_apis.SoundCloudAPI(config_dir, config, secrets)
-    apis.append(soundcloud_api)
+    soundcloud_api = music_apis.SoundCloudAPI()
+    music_api_list.append(soundcloud_api)
 except ValueError as e:
-    logger.warning("Missing SoundCloud secrets. (%s)", e)
+    logger.warning("SoundCloud unavailable. (%s)", e)
+    soundcloud_api = None
 
 try:
-    youtube_api = music_apis.YouTubeAPI(config_dir, config, secrets)
-    apis.append(youtube_api)
+    youtube_api = music_apis.YouTubeAPI()
+    music_api_list.append(youtube_api)
 except ValueError as e:
-    logger.warning("Missing YouTube secrets. (%s)", e)
+    logger.warning("YouTube unavailable. (%s)", e)
+    youtube_api = None
 
 queued_player = player.Player(gmusic_api)
 
-if gmusic_token:
-    gmusic_bot = bot.TelegramBot(options, gmusic_token, plugins, gmusic_api, gmusic_api, queued_player)
+try:
+    gmusic_bot = bot.TelegramBot(plugins, gmusic_api, gmusic_api, queued_player)
+except ValueError:
+    logger.info("GMusic telegram bot unavailable.")
 
-if soundcloud_token and soundcloud_api:
-    soundcloud_bot = bot.TelegramBot(options, soundcloud_token, plugins, soundcloud_api, gmusic_api, queued_player)
+try:
+    if soundcloud_api:
+        soundcloud_bot = bot.TelegramBot(plugins, soundcloud_api, gmusic_api, queued_player)
+except ValueError:
+    logger.info("SoundCloud telegram bot unavailable.")
 
-if youtube_token and youtube_api:
-    youtube_bot = bot.TelegramBot(options, youtube_token, plugins, youtube_api, gmusic_api, queued_player)
+try:
+    if youtube_api:
+        youtube_bot = bot.TelegramBot(plugins, youtube_api, gmusic_api, queued_player)
+except ValueError:
+    logger.info("YouTube telegram bot unavailable.")
+
+if "--no-rest" not in sys.argv:
+    import ssl
+
+    from aiohttp import web
+    from aiohttp_wsgi import WSGIHandler
+
+    from musicbot import rest_api
+
+    rest_api.init(music_api_list, queued_player)
+
+    cert_path = "config/ssl.cert"
+    key_path = "config/ssl.key"
+    if not (os.path.isfile(cert_path) and os.path.isfile(key_path)):
+        logger.critical("MISSING SSL FILES (ssl.cert and ssl.key in config directory)")
+        async_handler.shutdown()
+        sys.exit(4)
+
+    try:
+        wsgi_handler = WSGIHandler(rest_api.__hug_wsgi__)
+        app = web.Application()
+        app.router.add_route("*", "/{path_info:.*}", wsgi_handler)
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+
+        _password = getpass("Enter SSL key password: ")
+        ssl_context.load_cert_chain(cert_path, key_path, password=_password)
+        queued_player.run()
 
 
-def run():
+        def _exit():
+            app.shutdown()
+            app.cleanup()
+
+
+        async_handler.execute(None, _exit)
+        web.run_app(app, ssl_context=ssl_context)
+    except:
+        pass
+else:
     queued_player.run()
+    signal.sigwait({signal.SIGINT, signal.SIGTERM})
 
-
-if __name__ == "__main__":
-    run()
-    gmusic_bot.idle()
-    os.kill(os.getpid(), SIGINT)
+async_handler.shutdown()
+sys.exit(0)

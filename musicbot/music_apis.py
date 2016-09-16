@@ -1,5 +1,4 @@
 import json
-import locale
 import logging
 import os
 import socket
@@ -7,11 +6,14 @@ import threading
 import time
 import urllib
 from datetime import datetime
+from getpass import getpass
 
 import pylru
 from gmusicapi.clients.mobileclient import Mobileclient
 from gmusicapi.exceptions import CallFailure
 from pydub import AudioSegment, effects
+
+from musicbot import config
 
 
 class Song(object):
@@ -133,8 +135,8 @@ class AbstractAPI(object):
     _download_semaphore = None
     _conversion_semaphore = None
 
-    def __init__(self, config_dir, config):
-        songs_path = os.path.join(".", config.get("song_path", "songs"))
+    def __init__(self):
+        songs_path = config.get_songs_path()
 
         try:
             if not os.path.isdir(songs_path):
@@ -142,9 +144,8 @@ class AbstractAPI(object):
         except OSError:
             raise ValueError("Invalid song path: " + songs_path)
 
-        self._config_dir = config_dir
         self._songs_path = songs_path
-        self._create_semaphores(config)
+        self._create_semaphores()
         self._loading_ids = {}
         self._loading_ids_lock = threading.Lock()
 
@@ -263,17 +264,17 @@ class AbstractAPI(object):
         return _loader
 
     @classmethod
-    def _create_semaphores(cls, config):
+    def _create_semaphores(cls):
         if not cls._download_semaphore or not cls._conversion_semaphore:
-            max_downloads = max(config['max_downloads'], 1)
-            max_conversions = max(config['max_conversions'], 1)
+            max_downloads = max(config.get_max_downloads(), 1)
+            max_conversions = max(config.get_max_conversions(), 1)
             cls._download_semaphore = threading.Semaphore(max_downloads)
             cls._conversion_semaphore = threading.Semaphore(max_conversions)
 
 
 class AbstractSongProvider(AbstractAPI):
-    def __init__(self, config_dir, config):
-        super().__init__(config_dir, config)
+    def __init__(self):
+        super().__init__()
 
     def get_song(self):
         '''
@@ -329,11 +330,10 @@ class GMusicAPI(AbstractSongProvider):
     _songs = pylru.lrucache(256)
     _connect_lock = threading.Lock()
 
-    def __init__(self, config_dir, config, secrets):
-        super().__init__(config_dir, config)
-        self._ids_path = os.path.join(config_dir, "ids.json")
-        self._connect(config, secrets)
-        self._quality = config.get("quality", "med")
+    def __init__(self):
+        super().__init__()
+        self._connect()
+        self._quality = config.get_gmusic_quality()
         self._playlist_id = None
         self._playlist_token = None
         self._station_id = None
@@ -434,7 +434,6 @@ class GMusicAPI(AbstractSongProvider):
         self._remote_playlist_delete()
         self._remote_station_delete()
         self._playlist.clear()
-        os.remove(self._ids_path)
 
     def _load_suggestions(self, max_len):
         self._remote_station_create()
@@ -526,29 +525,19 @@ class GMusicAPI(AbstractSongProvider):
         self._api.delete_stations([self._station_id])
 
     def _load_ids(self):
-        if os.path.isfile(self._ids_path):
-            with open(self._ids_path, "r") as id_file:
-                ids = json.loads(id_file.read())
-                id_file.close()
-                self._playlist_token = ids.get("playlist_token", None)
-                if not self._playlist_token:
-                    return
-                self._playlist_id = ids.get("playlist_id", None)
-                self._station_id = ids.get("station_id", None)
+        secrets = config.get_secrets()
+        self._playlist_token = secrets.get("playlist_token", None)
+        if not self._playlist_token:
+            return
+        self._playlist_id = secrets.get("playlist_id", None)
+        self._station_id = secrets.get("station_id", None)
 
     def _write_ids(self):
-        if os.path.isfile(self._ids_path):
-            with open(self._ids_path, 'r') as id_file:
-                ids = json.loads(id_file.read())
-        else:
-            ids = {}
-
-        ids['playlist_token'] = self._playlist_token
-        ids['playlist_id'] = self._playlist_id
-        ids['station_id'] = self._station_id
-
-        with open(self._ids_path, 'w') as id_file:
-            id_file.write(json.dumps(ids, indent=4, sort_keys=True))
+        secrets = config.get_secrets()
+        secrets['playlist_token'] = self._playlist_token
+        secrets['playlist_id'] = self._playlist_id
+        secrets['station_id'] = self._station_id
+        config.save_secrets()
 
     @staticmethod
     def _format_playlist_name(name):
@@ -606,30 +595,59 @@ class GMusicAPI(AbstractSongProvider):
         return self._get_thread_safe_loader(song_id, "mp3", _download)
 
     @classmethod
-    def _connect(cls, config, secrets):
+    def _connect(cls):
         locked = cls._connect_lock.acquire(blocking=False)
         try:
             if locked:
                 if not cls._api:
                     api = Mobileclient(debug_logging=False)
 
-                    gmusic_locale = config.get('gmusic_locale', locale.getdefaultlocale()[0])
+                    gmusic_locale = config.get_gmusic_locale()
+
+                    secrets = config.get_secrets()
 
                     try:
-                        gmusic_user = secrets["gmusic_username"]
-                        gmusic_password = secrets["gmusic_password"]
-                        gmusic_device_id = secrets.get("gmusic_device_id", None)
+                        gmusic_user = secrets['gmusic_username']
                     except KeyError as e:
-                        logger = logging.getLogger("musicbot")
-                        logger.critical("Missing GMusic secrets")
-                        raise ValueError("Missing secrets key: " + str(e))
+                        gmusic_user = input("Enter your Google username: ").strip()
+                        if gmusic_user:
+                            secrets['gmusic_username'] = gmusic_user
+                            config.save_secrets()
+                        else:
+                            raise ValueError("Empty Google username")
 
-                    missing_device_id = not gmusic_device_id
-                    if missing_device_id or gmusic_device_id.upper() == "MAC":
+                    try:
+                        gmusic_password = secrets['gmusic_password']
+                    except KeyError as e:
+                        gmusic_password = getpass("Enter your Google password: ").strip()
+                        if gmusic_password:
+                            secrets['gmusic_password'] = gmusic_password
+                            config.save_secrets()
+                        else:
+                            raise ValueError("Empty Google password")
+
+                    try:
+                        gmusic_device_id = secrets['gmusic_device_id']
+                    except KeyError as e:
+                        choice = input(
+                            "No GMusic device ID found. Do you want to use this devices ID (1) or select an existing device ID (2, recommended)? ").strip()
+                        if choice == "1":
+                            gmusic_device_id = Mobileclient.FROM_MAC_ADDRESS
+                        elif choice == "2":
+                            gmusic_device_id = input(
+                                "Enter a device ID (leave empty to show all registered devices): ").strip()
+                            if gmusic_device_id:
+                                if gmusic_device_id.startswith("0x"):
+                                    gmusic_device_id = gmusic_device_id[2:]
+                                secrets['gmusic_device_id'] = gmusic_device_id
+                                config.save_secrets()
+                        else:
+                            raise ValueError("No GMusic device ID chosen")
+
+                    missing_device_id = False
+                    if not gmusic_device_id:
+                        missing_device_id = True
                         gmusic_device_id = Mobileclient.FROM_MAC_ADDRESS
-                    else:
-                        if gmusic_device_id.startswith("0x"):
-                            gmusic_device_id = gmusic_device_id[2:]
 
                     if not api.login(gmusic_user, gmusic_password, gmusic_device_id, gmusic_locale):
                         raise ValueError("Could not log in to GMusic")
@@ -653,12 +671,19 @@ class YouTubeAPI(AbstractAPI):
     _songs = pylru.lrucache(256)
     _api_key = None
 
-    def __init__(self, config_dir, config, secrets):
-        super().__init__(config_dir, config)
+    def __init__(self):
+        super().__init__()
+        secrets = config.get_secrets()
         try:
             self._api_key = secrets['youtube_api_key']
         except KeyError:
-            raise ValueError("Missing YouTube API key")
+            api_key = input("Enter YouTube API key: ").strip()
+            if api_key:
+                self._api_key = api_key
+                secrets['youtube_api_key'] = api_key
+                config.save_secrets()
+            else:
+                raise ValueError("Missing YouTube API key")
 
     def get_name(self):
         return "youtube"
@@ -744,9 +769,9 @@ class SoundCloudAPI(AbstractAPI):
     _client = None
     _connect_lock = threading.Lock()
 
-    def __init__(self, config_dir, config, secrets):
-        super().__init__(config_dir, config)
-        self._connect(secrets)
+    def __init__(self):
+        super().__init__()
+        self._connect()
 
     def get_name(self):
         return "soundcloud"
@@ -816,16 +841,23 @@ class SoundCloudAPI(AbstractAPI):
         return song
 
     @classmethod
-    def _connect(cls, secrets):
+    def _connect(cls):
         locked = cls._connect_lock.acquire(blocking=False)
         try:
             if locked:
                 if not cls._client:
-                    app_id = secrets['soundcloud_id']
+                    secrets = config.get_secrets()
+                    try:
+                        app_id = secrets['soundcloud_id']
+                    except KeyError:
+                        app_id = input("Enter SoundCloud App ID: ").strip()
+                        if app_id:
+                            secrets['soundcloud_id'] = app_id
+                            config.save_secrets()
+                        else:
+                            raise ValueError("Missing SoundCloud App ID")
                     client = cls._soundcloud.Client(client_id=app_id)
                     cls._client = client
-        except KeyError:
-            raise ValueError("Missing SoundCloud App ID")
         finally:
             if locked:
                 cls._connect_lock.release()

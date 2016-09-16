@@ -1,8 +1,8 @@
 import logging
 import threading
 import time
-from concurrent.futures.thread import ThreadPoolExecutor
 
+from musicbot import async_handler
 from musicbot.music_apis import AbstractSongProvider
 from musicbot.telegram.notifier import Notifier, Cause
 
@@ -14,8 +14,12 @@ class SongQueue(list):
         self._prepare_event = threading.Event()
         self._song_provider = song_provider
         self._append_lock = threading.Lock()
-        self._thread_pool = ThreadPoolExecutor()
-        threading.Thread(name="prepare_thread", target=self._prepare_next).start()
+
+        def close_prepare_thread():
+            self._stop_preparing = True
+            self._prepare_event.set()
+
+        async_handler.execute(self._prepare_next, close_prepare_thread, name="prepare_thread")
 
     def _prepare_next(self):
         logger = logging.getLogger("musicbot")
@@ -29,11 +33,9 @@ class SongQueue(list):
 
     def insert(self, index, song):
         list.insert(self, index, song)
-        self._thread_pool.submit(lambda: song.load())
+        async_handler.submit(lambda: song.load())
 
     def pop(self, *args, **kwargs):
-        result = None
-
         try:
             result = list.pop(self, *args, **kwargs)
             if isinstance(result.api, AbstractSongProvider):
@@ -55,13 +57,8 @@ class SongQueue(list):
         self._append_lock.acquire()
         if song not in self:
             list.append(self, song)
-            self._thread_pool.submit(_load_appended)
+            async_handler.submit(_load_appended)
         self._append_lock.release()
-
-    def close(self):
-        self._stop_preparing = True
-        self._prepare_event.set()
-        self._thread_pool.shutdown(False)
 
 
 class Player(object):
@@ -160,13 +157,12 @@ class Player(object):
                     self._next_chosen_event = threading.Event()
                     self._player.wait_done()
 
-        threading.Thread(name="player_thread", target=_run).start()
+        def _stop():
+            self._stop = True
+            if self._player:
+                self._player.stop()
 
-    def close(self):
-        self._stop = True
-        if self._player:
-            self._player.stop()
-        self._queue.close()
+        async_handler.execute(_run, _stop, name="player_thread")
 
     def _add_played(self, song):
         self._last_played.append(song)

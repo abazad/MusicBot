@@ -1,10 +1,7 @@
-import json
 import logging
-import os
-import signal
 import socket
+import sys
 import time
-from threading import Thread
 
 import telegram
 from pylru import lrucache
@@ -21,6 +18,8 @@ from telegram.inlinequeryresultarticle import InlineQueryResultArticle
 from telegram.replykeyboardhide import ReplyKeyboardHide
 from telegram.replykeyboardmarkup import ReplyKeyboardMarkup
 
+from musicbot import async_handler
+from musicbot import config
 from musicbot import music_apis
 from musicbot.telegram import decorators, notifier
 from musicbot.telegram.user import User
@@ -32,60 +31,40 @@ def get_ip_address():
     return s.getsockname()[0]
 
 
-class TelegramOptions(object):
-    def __init__(self, config_dir):
-        self._config_dir = config_dir
-        self._load_config()
-        self.password = None
-        self.clients = set()
-
-    def _load_config(self):
-        config_path = os.path.join(self._config_dir, "config.json")
-        with open(config_path, 'r') as config_file:
-            config = json.loads(config_file.read())
-            secrets_location = os.path.expanduser(config.get("secrets_location", "config"))
-            self.secrets_path = os.path.join(secrets_location, "secrets.json")
-            self.enable_suggestions = config.get("suggest_songs", 0)
-            self.enable_password = config.get("enable_session_password", 1)
-            self.load_plugins = config.get("load_plugins", 1)
-
-        ids_path = os.path.join(self._config_dir, "ids.json")
-        if os.path.isfile(ids_path):
-            with open(ids_path, 'r') as ids_file:
-                ids = json.loads(ids_file.read())
-                self.admin_chat_id = ids.get("admin_chat_id", 0)
-        else:
-            self.admin_chat_id = 0
-
-    def save_config(self, file, **kwargs):
-        file_path = os.path.join(self._config_dir, file)
-        if os.path.isfile(file_path):
-            with open(file_path, 'r') as config_file:
-                config = json.loads(config_file.read())
-        else:
-            config = {}
-
-        for key in kwargs:
-            config[key] = kwargs[key]
-
-        with open(file_path, 'w') as config_file:
-            config_file.write(json.dumps(config, indent=4, sort_keys=True))
-
-        self._load_config()
+_clients = set()
+_password = None
 
 
 class TelegramBot(notifier.Subscribable):
-    def __init__(self, options, token, plugins, music_api, song_provider, player):
-        self._options = options
+    def __init__(self, plugins, music_api, song_provider, player):
         self._music_api = music_api
         self._song_provider = song_provider
         self._player = player
         self._sent_keyboard = {}
         self._sent_keyboard_message_ids = {}
+
+        secrets = config.get_secrets()
+
+        token_key = "telegram_" + music_api.get_name() + "_bot_token"
+        if token_key in secrets:
+            token = secrets[token_key]
+        else:
+            # Ask for token input
+            token = input("Please provide a telegram token for the {} bot (leave empty if unwanted): ".format(
+                music_api.get_pretty_name()))
+            token = token.strip()
+            if not token:
+                raise ValueError("No token given")
+            secrets[token_key] = token
+            config.save_secrets()
+
         self._updater = updater.Updater(token=token)
+
         _dispatcher = self._updater.dispatcher
         self._register_commands(_dispatcher, plugins)
         self._updater.start_polling()
+
+        async_handler.execute(None, self._updater.stop)
 
     def _register_commands(self, _dispatcher, plugins):
         # keyboard answer handlers
@@ -229,7 +208,7 @@ class TelegramBot(notifier.Subscribable):
 
     def is_logged_in(self, telegram_user):
         user = User(user=telegram_user)
-        return (not self._options.enable_password) or (user in self._options.clients)
+        return (not config.get_telegram_password_enabled()) or (user in _clients)
 
     def get_current_song_message(self):
         return "Now playing: {}".format(self._player.get_current_song())
@@ -263,16 +242,15 @@ class TelegramBot(notifier.Subscribable):
     def login_command(self, bot, update):
         chat_id = update.message.chat_id
         user = update.message.from_user
-        options = self._options
-        if not options.enable_password:
+        if not config.get_telegram_password_enabled():
             bot.send_message(chat_id=chat_id, text="There is no password")
             return
 
-        if user.id in options.clients:
+        if user.id in _clients:
             bot.send_message(chat_id=chat_id, text="You are already logged in")
             return
 
-        if not options.password:
+        if not _password:
             bot.send_message(chat_id=chat_id, text="Admin hasn't decided which password to use yet")
             return
 
@@ -286,8 +264,8 @@ class TelegramBot(notifier.Subscribable):
             bot.send_message(chat_id=chat_id, text="Password can't be empty")
             return
 
-        if password == options.password:
-            options.clients.add(User(user=user))
+        if password == _password:
+            _clients.add(User(user=user))
             bot.send_message(chat_id=chat_id, text="Successfully logged in")
         else:
             bot.send_message(chat_id=chat_id, text="Wrong password")
@@ -301,18 +279,18 @@ class TelegramBot(notifier.Subscribable):
 
     def admin_command(self, bot, update):
         chat_id = update.message.chat_id
-        options = self._options
-        if not options.admin_chat_id:
-            options.admin_chat_id = chat_id
-            options.save_config("ids.json", admin_chat_id=chat_id)
+        secrets = config.get_secrets()
+        admin_key = "telegram_admin_chat_id"
+        if not secrets.get(admin_key, 0):
+            secrets[admin_key] = chat_id
+            config.save_secrets()
             bot.send_message(text="You're admin now!", chat_id=chat_id)
-        elif chat_id == options.admin_chat_id:
+        elif chat_id == secrets[admin_key]:
             bot.send_message(text="You already are admin!", chat_id=chat_id)
         else:
             bot.send_message(text="There can be only one!", chat_id=chat_id)
 
     # Password protected commands
-
     @dispatcher.run_async
     @decorators.password_protected_command
     @decorators.queue_action_command(question="What song do you want to skip?")
@@ -399,7 +377,7 @@ class TelegramBot(notifier.Subscribable):
             query = update.inline_query.query
             api = self._music_api
 
-            suggest = self._options.enable_suggestions and isinstance(api, music_apis.AbstractSongProvider)
+            suggest = config.get_suggest_songs_enabled() and isinstance(api, music_apis.AbstractSongProvider)
             if query and query.strip():
                 query = query.strip()
                 try:
@@ -470,15 +448,16 @@ class TelegramBot(notifier.Subscribable):
 
     @decorators.admin_command
     def reset_command(self, bot, update):
-        self._options.save_config("ids.json", admin_chat_id=0)
-        self._player.close()
-        self._music_api.reset()
-
+        self._song_provider.reset()
+        del config.get_secrets()['telegram_admin_chat_id']
+        config.save_secrets()
+        
         def _exit():
+            async_handler.shutdown(False)
             time.sleep(1)
-            os.kill(os.getpid(), signal.SIGINT)
+            sys.exit(0)
 
-        Thread(name="EXIT_THREAD", target=_exit).start()
+        async_handler.submit(_exit)
 
     @dispatcher.run_async
     @decorators.admin_command
@@ -490,22 +469,21 @@ class TelegramBot(notifier.Subscribable):
     @decorators.admin_command
     def toggle_password_command(self, bot, update):
         chat_id = update.message.chat_id
-        options = self._options
-        if options.enable_password:
-            options.enable_password = False
-            options.clients.clear()
+        if config.get_telegram_password_enabled():
+            config.set_telegram_password_enabled(False)
+            _clients.clear()
+            global _password
+            _password = None
             bot.send_message(chat_id=chat_id, text="Password disabled")
         else:
-            options.enable_password = True
+            config.set_telegram_password_enabled(True)
             bot.send_message(
                 chat_id=chat_id, text="Password is now enabled. Set a password with /setpassword [password]")
-        options.save_config("config.json", enable_session_password=options.enable_password)
 
     @decorators.admin_command
     def set_password_command(self, bot, update):
         chat_id = update.message.chat_id
-        options = self._options
-        if not options.enable_password:
+        if not config.get_telegram_password_enabled():
             bot.send_message(chat_id=chat_id, text="Please enable password protection with /togglepassword first")
             return
 
@@ -519,33 +497,34 @@ class TelegramBot(notifier.Subscribable):
             bot.send_message(chat_id=chat_id, text="Password can't be empty")
             return
 
-        options.password = password
-        options.clients.add(User(user=update.message.from_user))
+        global _password
+        _password = password
+        _clients.add(User(user=update.message.from_user))
         bot.send_message(chat_id=chat_id, text="Successfully changed password")
 
     @dispatcher.run_async
     @decorators.admin_command
     def ban_user_command(self, bot, update):
         chat_id = update.message.chat_id
-        options = self._options
 
-        if not options.enable_password:
+        if not config.get_telegram_password_enabled():
             bot.send_message(chat_id=chat_id, text="Password is disabled")
             return
 
-        if not options.clients:
+        if not _clients:
             bot.send_message(chat_id=chat_id, text="No clients logged in")
             return
 
         text = "Who should be banned?"
         keyboard_items = list(
-            map(lambda client: InlineKeyboardButton(text=client.name, callback_data=str(client.user_id)),
-                self._options.clients))
+            map(lambda client: InlineKeyboardButton(text=client.name, callback_data=str(client.user_id)), _clients))
 
         @decorators.callback_keyboard_answer_handler
         def _action(chat_id, data):
-            options.clients = set(filter(lambda client: str(client.user_id) != data, options.clients))
-            options.password = None
+            global _clients
+            global _password
+            _clients = set(filter(lambda client: str(client.user_id) != data, _clients))
+            _password = None
             return "Banned user. Please set a new password."
 
         self.send_callback_keyboard(bot, chat_id, text, keyboard_items, _action)
@@ -561,7 +540,7 @@ class TelegramBot(notifier.Subscribable):
         quality = split[1]
         try:
             self._music_api.set_quality(quality)
-            self._options.save_config("config.json", quality=quality)
+            config.set_gmusic_quality(quality)
             bot.send_message(chat_id=chat_id, text="Successfully changed quality")
         except ValueError:
             bot.send_message(chat_id=chat_id, text="Invalid quality")
@@ -570,10 +549,11 @@ class TelegramBot(notifier.Subscribable):
     @decorators.admin_command
     def exit_command(self, bot, update):
         def _exit():
+            async_handler.shutdown(False)
             time.sleep(1)
-            os.kill(os.getpid(), signal.SIGINT)
+            sys.exit(0)
 
-        Thread(name="EXIT_THREAD", target=_exit).start()
+        async_handler.submit(_exit)
 
     @dispatcher.run_async
     @decorators.admin_command
@@ -609,3 +589,9 @@ class TelegramBot(notifier.Subscribable):
 
     def idle(self):
         self._updater.idle()
+
+    def get_clients(self):
+        return _clients
+
+    def get_password(self):
+        return _password
