@@ -587,7 +587,6 @@ def _exit():
     os.kill(os.getpid(), signal.SIGINT)
 
 
-@asyncio.coroutine
 @hug.put(requires=authentication)
 def exit_bot(user: hug.directives.user, response=None):
     if not has_permission(user, ["admin", "exit"]):
@@ -599,10 +598,9 @@ def exit_bot(user: hug.directives.user, response=None):
     return "OK"
 
 
-@asyncio.coroutine
 @hug.put(requires=authentication)
 def reset_bot(user: hug.directives.user, response=None):
-    if not has_permission(user, []):
+    if not has_permission(user, ["admin", "reset"]):
         response.status = falcon.HTTP_FORBIDDEN
         return None
     player.close()
@@ -611,8 +609,8 @@ def reset_bot(user: hug.directives.user, response=None):
         if isinstance(api, AbstractSongProvider):
             api.reset()
 
-    os.remove("config/clients.db")
-    os.remove("config/rest_bot.secrets")
+    # os.remove("config/clients.db")
+    # os.remove("config/rest_bot.secrets")
 
     threading.Thread(target=_exit).start()
     return "OK"
