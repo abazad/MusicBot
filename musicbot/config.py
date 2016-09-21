@@ -8,10 +8,7 @@ import jwt
 
 import _version
 
-if _version.debug:
-    _config_dir = "../config"
-else:
-    _config_dir = "config"
+_config_dir = "config"
 
 
 def _load_config():
