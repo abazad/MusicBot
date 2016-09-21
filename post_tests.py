@@ -1,23 +1,21 @@
-import json
 import os
 import shutil
 
+secrets_keys = [
+    'gmusic_username',
+    'gmusic_password',
+    'gmusic_device_id',
+    'youtube_api_key',
+    'soundcloud_id',
+    'telegram_gmusic_bot_token',
+    'telegram_youtube_bot_token',
+    'telegram_soundcloud_bot_token'
+]
+
 
 def restore_blank_secrets():
-    print("Restoring empty secrets")
-    try:
-        with open("config/secrets.json", 'r') as secrets_file:
-            secrets = json.loads(secrets_file.read())
-            secrets_keys = secrets.keys()
-    except IOError:
-        return
-
-    secrets = {}
-    for key in secrets_keys:
-        secrets[key] = ""
-
-    with open("config/secrets.json", 'w') as secrets_file:
-        secrets_file.write(json.dumps(secrets, indent=4, sort_keys=True))
+    print("Removing secrets")
+    os.remove("config/secrets.dat")
 
 
 def save_logs():

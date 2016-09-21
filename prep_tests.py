@@ -1,13 +1,21 @@
-import json
 import logging
 import os
 
+import jwt
+
+secrets_keys = [
+    'gmusic_username',
+    'gmusic_password',
+    'gmusic_device_id',
+    'youtube_api_key',
+    'soundcloud_id',
+    'telegram_gmusic_bot_token',
+    'telegram_youtube_bot_token',
+    'telegram_soundcloud_bot_token'
+]
+
 
 def save_secrets():
-    with open("config/secrets.json", 'r') as secrets_file:
-        secrets = json.loads(secrets_file.read())
-        secrets_keys = secrets.keys()
-
     logger = logging.getLogger("musicbot")
     logger.info("Reading secrets from environment variables")
     secrets = {}
@@ -25,8 +33,8 @@ def save_secrets():
         return
 
     logger.info("Writing secrets to secrets.json")
-    with open("config/secrets.json", 'w') as secrets_file:
-        secrets_file.write(json.dumps(secrets))
+    with open("config/secrets.dat", 'wb') as secrets_file:
+        secrets_file.write(jwt.encode(secrets, "testpw", algorithm="HS256"))
 
 
 if __name__ == '__main__':

@@ -1,10 +1,17 @@
-import json
 import logging
 import os
 import unittest
 from _collections_abc import Iterable
 
+import _version
+
+_version.debug = True
+
+import test_logger
 from musicbot.music_apis import Song, GMusicAPI, YouTubeAPI, SoundCloudAPI, AbstractAPI
+
+if test_logger:
+    pass
 
 
 class TestSong(unittest.TestCase):
@@ -120,15 +127,9 @@ class SongProviderTest(object):
 class TestGMusicAPI(unittest.TestCase, APITest, SongProviderTest):
     @classmethod
     def setUpClass(cls):
-        config_dir = "config"
-        with open(os.path.join(config_dir, "config.json"), 'r') as config:
-            config = json.loads(config.read())
-        with open(os.path.join(config['secrets_location'], "secrets.json"), 'r') as secrets:
-            secrets = json.loads(secrets.read())
-
         cls.song_id = "Ttq2uszcaztntcgnllswbn4pnqy"
         try:
-            cls.api = GMusicAPI(config_dir, config, secrets)
+            cls.api = GMusicAPI()
         except ValueError as e:
             logging.getLogger("musicbot").warning("GMusic test skipped")
             cls.skipTest("Invalid or missing gmusic secrets ({})".format(str(e)))
@@ -158,15 +159,9 @@ class TestGMusicAPI(unittest.TestCase, APITest, SongProviderTest):
 class TestYoutubeAPI(unittest.TestCase, APITest):
     @classmethod
     def setUpClass(cls):
-        config_dir = "config"
-        with open(os.path.join(config_dir, "config.json"), 'r') as config:
-            config = json.loads(config.read())
-        with open(os.path.join(config['secrets_location'], "secrets.json"), 'r') as secrets:
-            secrets = json.loads(secrets.read())
-
         cls.song_id = "NJ1_JpRKeic"
         try:
-            cls.api = YouTubeAPI(config_dir, config, secrets)
+            cls.api = YouTubeAPI()
         except ValueError as e:
             logging.getLogger("musicbot").warning("GMusic test skipped")
             cls.skipTest("Invalid or missing YouTube secrets ({})".format(str(e)))
@@ -181,15 +176,9 @@ class TestYoutubeAPI(unittest.TestCase, APITest):
 class TestSoundCloudAPI(unittest.TestCase, APITest):
     @classmethod
     def setUpClass(cls):
-        config_dir = "config"
-        with open(os.path.join(config_dir, "config.json"), 'r') as config:
-            config = json.loads(config.read())
-        with open(os.path.join(config['secrets_location'], "secrets.json"), 'r') as secrets:
-            secrets = json.loads(secrets.read())
-
         cls.song_id = "160239605"
         try:
-            cls.api = SoundCloudAPI(config_dir, config, secrets)
+            cls.api = SoundCloudAPI()
         except ValueError as e:
             logging.getLogger("musicbot").warning("GMusic test skipped")
             cls.skipTest("Invalid or missing SoundCloud secrets ({})".format(str(e)))

@@ -1,8 +1,17 @@
 import os
 import unittest
 
+import _version
+
+_version.debug = True
+
+import test_logger
+from musicbot import async_handler
 from musicbot.music_apis import Song, AbstractSongProvider
 from musicbot.player import SongQueue
+
+if test_logger:
+    pass
 
 
 class TestSongProvider(AbstractSongProvider):
@@ -47,7 +56,7 @@ class TestSongQueue(unittest.TestCase):
         cls.song_provider = TestSongProvider(cls._loader)
 
     def tearDown(self):
-        self.queue.close()
+        async_handler._shutdown_executed()
 
     def test_pop(self):
         first_song = Song("testidpop", self.song_provider)

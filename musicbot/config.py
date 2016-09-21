@@ -6,6 +6,8 @@ from os import path
 
 import jwt
 
+import _version
+
 _config_dir = "config"
 
 
@@ -38,7 +40,10 @@ def _load_secrets():
         return jwt.decode(secrets_file.read(), _secrets_password, algorithm="HS256")
 
 
-_secrets_password = getpass("Enter secrets password: ")
+if _version.debug:
+    _secrets_password = "testpw"
+else:
+    _secrets_password = getpass("Enter secrets password: ")
 _secrets = _load_secrets()
 
 
