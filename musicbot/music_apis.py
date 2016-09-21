@@ -753,7 +753,11 @@ class YouTubeAPI(AbstractAPI):
         def _get_audio_extension():
             nonlocal audio
             url = "https://www.youtube.com/watch?v=" + song_id
-            video = self._pafy.new(url)
+            try:
+                video = self._pafy.new(url)
+            except TypeError as e:
+                logging.getLogger("musicbot").exception("Error loading url: %s", url)
+                raise e
             audio = video.getbestaudio()
             return audio.extension
 
