@@ -23,6 +23,7 @@ def save_secrets():
     missing_key = False
     for key in secrets_keys:
         try:
+            print("Writing key: " + key)
             secrets[key] = os.environ[key]
         except KeyError:
             print("Missing key:", key)
