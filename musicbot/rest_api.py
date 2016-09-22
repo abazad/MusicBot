@@ -86,9 +86,6 @@ class _SecretClient(object):
         self.pw_hash = pw_hash
         self.permissions = permissions
 
-    def __str__(self):
-        return self.name
-
     def __eq__(self, other):
         if not isinstance(other, _SecretClient):
             return False
@@ -96,6 +93,9 @@ class _SecretClient(object):
 
     def __hash__(self):
         return hash(self.name)
+
+    def __str__(self):
+        return "User {}: [permissions={}] [pw_hash={}]".format(self.name, self.permissions, self.pw_hash)
 
     def to_json(self):
         return {"name": self.name,
@@ -176,6 +176,7 @@ def _add_client(client):
                        (client.name,
                         client.pw_hash,
                         ",".join(client.permissions)))
+            db.commit()
         finally:
             db.close()
 
@@ -199,6 +200,7 @@ logger = logging.getLogger("musicbot")
 db = _get_db_conn()
 db.execute(
     "CREATE TABLE IF NOT EXISTS clients (userid INTEGER PRIMARY KEY ASC AUTOINCREMENT, username TEXT UNIQUE NOT NULL, pw_hash CHAR(75) NOT NULL, permissions TEXT)")
+db.commit()
 db.close()
 
 
@@ -482,6 +484,7 @@ def claim_admin(user: hug.directives.user, response=None):
         db = _get_db_conn()
         try:
             db.execute("UPDATE clients SET permissions=? WHERE username=?", (",".join(permissions), username))
+            db.commit()
         finally:
             db.close()
     return _create_user_token(username, permissions)
