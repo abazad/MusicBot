@@ -23,6 +23,7 @@ You can add custom commands by following the instructions on the [Adding command
   - [pydub](https://github.com/jiaaro/pydub)
   - [simpleaudio](https://github.com/hamiltron/py-simple-audio)
   - [pylru](https://github.com/jlhutch/pylru)
+  - [cryptography](https://github.com/pyca/cryptography)
   - If you want to be able to queue youtube songs
     - [pafy](https://github.com/mps-youtube/pafy)
     - [youtube-dl](https://github.com/rg3/youtube-dl)
@@ -34,4 +35,3 @@ You can add custom commands by following the instructions on the [Adding command
     - [pyjwt](https://github.com/jpadilla/pyjwt)
     - [bcrypt](https://github.com/pyca/bcrypt) (or some other bcrypt library)
     - [aiohttp_wsgi](https://github.com/etianen/aiohttp-wsgi)
-    - [cryptography](https://github.com/pyca/cryptography)
