@@ -291,6 +291,7 @@ def music_apis():
 def queue(body, remove: hug.types.boolean = False, user: hug.directives.user = None, response=None):
     try:
         song = Song.from_json(body, music_api_names)
+        song.user = user.name
     except ValueError as e:
         response.status = falcon.HTTP_400
         return str(e)

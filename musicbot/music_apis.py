@@ -17,7 +17,7 @@ from musicbot import config
 
 
 class Song(object):
-    def __init__(self, song_id, api, title=None, description=None, albumArtUrl=None, str_rep=None, duration=None):
+    def __init__(self, song_id, api, title=None, description=None, albumArtUrl=None, str_rep=None, duration=None, user=None):
         '''
         Constructor
 
@@ -29,6 +29,7 @@ class Song(object):
         albumArtUrl -- a URL to the album art
         str_rep -- a human readable string representation for this instance. Will be returned for __str__(). The song duration maybe will automatically appended.
         duration -- the song duration (as a string in the form [HH:]MM:SS)
+        user -- a string describing which user queued this song (if applicable)
         '''
         if not api:
             raise ValueError("api is None")
@@ -43,6 +44,7 @@ class Song(object):
         self.albumArtUrl = albumArtUrl
         self._api = api
         self.duration = duration
+        self.user = str(user)
         self.loaded = False
 
         if str_rep:
@@ -78,7 +80,8 @@ class Song(object):
             "description": self.description,
             "albumArtUrl": self.albumArtUrl,
             "str_rep": self._str_rep,
-            "duration": self.duration
+            "duration": self.duration,
+            "user": self.user
         }
 
     @staticmethod
@@ -109,7 +112,8 @@ class Song(object):
             description=json.get("description", None),
             albumArtUrl=json.get("albumArtUrl", None),
             str_rep=json.get("str_rep", None),
-            duration=json.get("duration", None)
+            duration=json.get("duration", None),
+            user=json.get("user", None)
         )
 
     def __repr__(self):
