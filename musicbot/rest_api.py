@@ -291,6 +291,61 @@ def login(username, password, response=None):
     return _create_user_token(username, client.permissions)
 
 
+@asyncio.coroutine
+@hug.put(requires=authentication)
+def change_password(old_password, new_password, user: hug.directives.user, response=None):
+    """
+    Change the password of the user if the old password is correct and the new one satisfies the password requirements.
+    :param old_password: the old password
+    :param new_password: the new password
+    """
+    client = _get_client(user['name'])
+    success = bcrypt_sha256.verify(old_password, client.pw_hash)
+    if not success:
+        logger.debug("%s tried to change his password with a wrong old password", user['name'])
+        response.status = falcon.HTTP_FORBIDDEN
+        return "Wrong password"
+
+    new_password = new_password.strip()
+    if len(new_password) < 6:
+        logger.debug("Password too short")
+        response.status = falcon.HTTP_BAD_REQUEST
+        return "Invalid password. Must be of length >= 6"
+
+    pw_hash = bcrypt_sha256.encrypt(new_password)
+
+    db = _get_db_conn()
+    try:
+        db.execute("UPDATE clients SET pw_hash=? WHERE username=?", pw_hash, user['name'])
+        db.commit()
+        return "OK"
+    finally:
+        db.close()
+
+
+@asyncio.coroutine
+@hug.put(requires=authentication)
+def delete_user(password, user: hug.directives.user, response=None):
+    """
+    Delete the users account.
+    :param password: the user's password
+    """
+    client = _get_client(user['name'])
+    success = bcrypt_sha256.verify(password, client.pw_hash)
+    if not success:
+        logger.debug("%s tried to delete his account with a wrong password", user['name'])
+        response.status = falcon.HTTP_FORBIDDEN
+        return "Wrong password"
+
+    db = _get_db_conn()
+    try:
+        db.execute("DELETE FROM clients WHERE username=?", user['name'])
+        db.commit()
+        return "OK"
+    finally:
+        db.close()
+
+
 @hug.get()
 def music_apis():
     return apis_json
