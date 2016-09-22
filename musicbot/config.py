@@ -119,13 +119,12 @@ def _load_secrets():
     if jwt_secrets:
         return jwt_secrets
 
-    json_secrets = _load_json_secrets()
-    if json_secrets:
-        return json_secrets
-
     secrets_path = _get_secrets_path()
     if not path.isfile(secrets_path):
         logging.getLogger("musicbot").debug("No secrets file found")
+        json_secrets = _load_json_secrets()
+        if json_secrets:
+            return json_secrets
         return {}
     f = Fernet(key)
     with open(secrets_path, 'rb') as secrets_file:
