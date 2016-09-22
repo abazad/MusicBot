@@ -34,3 +34,4 @@ You can add custom commands by following the instructions on the [Adding command
     - [pyjwt](https://github.com/jpadilla/pyjwt)
     - [bcrypt](https://github.com/pyca/bcrypt) (or some other bcrypt library)
     - [aiohttp_wsgi](https://github.com/etianen/aiohttp-wsgi)
+    - [cryptography](https://github.com/pyca/cryptography)
