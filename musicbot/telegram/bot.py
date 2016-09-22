@@ -444,7 +444,9 @@ class TelegramBot(notifier.Subscribable):
     # Admin commands
     @decorators.admin_command
     def clear_queue_command(self, bot, update):
+        chat_id = update.message.chat_id
         self._player.clear_queue()
+        bot.send_message(chat_id=chat_id, text=self.get_queue_message())
 
     @decorators.admin_command
     def reset_command(self, bot, update):
