@@ -31,6 +31,9 @@ def get_ip_address():
     return s.getsockname()[0]
 
 
+admin_commands = ["clearqueue", "ip", "togglepassword", "setpassword", "banuser", "setquality",
+                  "stationremove", "stationreload", "reset", "exit"]
+
 _clients = set()
 _password = None
 
@@ -276,11 +279,14 @@ class TelegramBot(notifier.Subscribable):
         if not secrets.get(admin_key, 0):
             secrets[admin_key] = chat_id
             config.save_secrets()
-            bot.send_message(text="You're admin now!", chat_id=chat_id)
+            text = "You're admin now!"
         elif chat_id == secrets[admin_key]:
-            bot.send_message(text="You already are admin!", chat_id=chat_id)
+            text = "You already are admin!"
         else:
             bot.send_message(text="There can be only one!", chat_id=chat_id)
+            return
+        text += "\nHidden comamnds:\n/" + "\n/".join(admin_commands)
+        bot.send_message(text=text, chat_id=chat_id)
 
     # Password protected commands
     @dispatcher.run_async
