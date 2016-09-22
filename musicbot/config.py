@@ -1,10 +1,16 @@
+import base64
 import json
 import locale
 import logging
+import os
 from getpass import getpass
 from os import path
 
 import jwt
+from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 import _version
 
@@ -26,24 +32,95 @@ def _save_config():
 _config = _load_config()
 
 
-def _get_secrets_path():
-    secrets_dir = path.expanduser(_config.get("secrets_location", "config"))
-    return path.join(secrets_dir, "secrets.dat")
-
-
-def _load_secrets():
-    secrets_path = _get_secrets_path()
-    if not path.isfile(secrets_path):
-        logging.getLogger("musicbot").debug("No secrets file found")
-        return {}
-    with open(secrets_path, 'rb') as secrets_file:
-        return jwt.decode(secrets_file.read(), _secrets_password, algorithm="HS256")
+def get_secrets_dir():
+    return path.expanduser(_config.get("secrets_location", "config"))
 
 
 if _version.debug:
     _secrets_password = "testpw"
 else:
     _secrets_password = getpass("Enter secrets password: ")
+
+salt_path = path.join(get_secrets_dir(), "salt.txt")
+if path.isfile(salt_path):
+    with open(salt_path, 'rb') as salt_file:
+        salt = salt_file.read()
+else:
+    salt = os.urandom(16)
+    with open(salt_path, 'wb') as salt_file:
+        salt_file.write(salt)
+
+kdf = PBKDF2HMAC(
+    algorithm=hashes.SHA256(),
+    length=32,
+    salt=salt,
+    iterations=100000,
+    backend=default_backend()
+)
+key = base64.urlsafe_b64encode(kdf.derive(_secrets_password.encode()))
+
+
+def _get_secrets_path():
+    return path.join(get_secrets_dir(), "secrets.dat")
+
+
+def _load_jwt_secrets():
+    """
+    Loads secrets from the secrets.dat if they are JWT data.
+    This is a legacy method and will be removed in November 2016.
+    :return: the secrets or None
+    """
+    secrets_path = _get_secrets_path()
+    if not path.isfile(secrets_path):
+        logging.getLogger("musicbot").debug("No jwt secrets file found")
+        return None
+    with open(secrets_path, 'rb') as secrets_file:
+        try:
+            return jwt.decode(secrets_file.read(), _secrets_password, algorithm="HS256")
+        except jwt.exceptions.InvalidTokenError:
+            return None
+
+
+def _load_json_secrets():
+    """
+    Loads secrets from unencrypted secrets.json.
+    This is a legacy method and will be removed in November 2016.
+    :return: the secrets or None
+    """
+    logger = logging.getLogger("musicbot")
+    secrets_path = path.join(get_secrets_dir(), "secrets.json")
+    if not path.isfile(secrets_path):
+        logger.debug("No json secrets file found")
+        return None
+    with open(secrets_path, 'r') as secrets_file:
+        secrets = json.loads(secrets_file.read())
+    for secrets_key in ["gmusic_bot_token", "youtube_bot_token", "soundcloud_bot_token"]:
+        if secrets_key in secrets:
+            token = secrets[secrets_key]
+            del secrets[secrets_key]
+            secrets["telegram_" + secrets_key] = token
+    logger.info("You can remove the secrets.json now.")
+    return secrets
+
+
+def _load_secrets():
+    jwt_secrets = _load_jwt_secrets()
+    if jwt_secrets:
+        return jwt_secrets
+
+    json_secrets = _load_json_secrets()
+    if json_secrets:
+        return json_secrets
+
+    secrets_path = _get_secrets_path()
+    if not path.isfile(secrets_path):
+        logging.getLogger("musicbot").debug("No secrets file found")
+        return {}
+    f = Fernet(key)
+    with open(secrets_path, 'rb') as secrets_file:
+        return json.loads(str(f.decrypt(_secrets_password, secrets_file.read())))
+
+
 _secrets = _load_secrets()
 
 
@@ -110,5 +187,9 @@ def save_secrets():
     Save secrets to encrypted file on disk.
     """
     secrets_path = _get_secrets_path()
+    f = Fernet(key)
     with open(secrets_path, 'wb') as secrets_file:
-        secrets_file.write(jwt.encode(_secrets, _secrets_password, algorithm="HS256"))
+        secrets_file.write(f.encrypt(json.dumps(_secrets).encode()))
+
+
+save_secrets()

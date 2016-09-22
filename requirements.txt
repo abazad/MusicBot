@@ -12,3 +12,4 @@ passlib
 pyjwt
 bcrypt
 aiohttp_wsgi
+cryptography
