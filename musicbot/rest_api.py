@@ -356,7 +356,7 @@ def music_apis():
 def queue(body, remove: hug.types.boolean = False, user: hug.directives.user = None, response=None):
     try:
         song = Song.from_json(body, music_api_names)
-        song.user = user.name
+        song.user = user['name']
     except ValueError as e:
         logger.debug("Received bad json %s", e)
         response.status = falcon.HTTP_400
@@ -364,18 +364,18 @@ def queue(body, remove: hug.types.boolean = False, user: hug.directives.user = N
 
     if remove:
         if not has_permission(user, ["admin", "mod", "queue_remove"]):
-            logger.debug("Unauthorized attempt to remove song from queue by %s", user.name)
+            logger.debug("Unauthorized attempt to remove song from queue by %s", user['name'])
             response.status = falcon.HTTP_FORBIDDEN
             return "Not permitted"
         try:
-            logger.debug("Song %s removed by %s", song, user.name)
+            logger.debug("Song %s removed by %s", song, user['name'])
             queue.remove(song)
         except ValueError:
-            logger.debug("%s tried to remove Song not in queue: %s", user.name, song)
+            logger.debug("%s tried to remove Song not in queue: %s", user['name'], song)
             response.status = falcon.HTTP_400
             return "song {} is not in queue".format(song)
     else:
-        logger.debug("Song %s added by %s", song, user.name)
+        logger.debug("Song %s added by %s", song, user['name'])
         queue.append(song)
     return "OK"
 
@@ -435,10 +435,10 @@ def player_state():
 @hug.put(requires=authentication)
 def toggle_pause(user: hug.directives.user):
     if player._pause:
-        logger.debug("Resumed by %s", user.name)
+        logger.debug("Resumed by %s", user['name'])
         player.resume()
     else:
-        logger.debug("Paused by %s", user.name)
+        logger.debug("Paused by %s", user['name'])
         player.pause()
     return player_state()
 
@@ -446,7 +446,7 @@ def toggle_pause(user: hug.directives.user):
 @asyncio.coroutine
 @hug.put(requires=authentication)
 def next_song(user: hug.directives.user):
-    logger.debug("Skip to next song by %s", user.name)
+    logger.debug("Skip to next song by %s", user['name'])
     player.next()
     return player_state()
 
@@ -557,7 +557,7 @@ def claim_admin(user: hug.directives.user, response=None):
         return None
     with claim_admin_lock:
         if has_admin():
-            logger.debug("%s tried to claim admin rights, but there already is an admin.", user.name)
+            logger.debug("%s tried to claim admin rights, but there already is an admin.", user['name'])
             response.status = falcon.HTTP_CONFLICT
             return None
         permissions.append("admin")
@@ -581,7 +581,7 @@ def get_available_permissions(user: hug.directives.user = None, response=None):
     :return: a list of permissions
     """
     if user and (not is_admin(user)):
-        logger.debug("%s tried to get available permissions but is not admin.", user.name)
+        logger.debug("%s tried to get available permissions but is not admin.", user['name'])
         response.status = falcon.HTTP_FORBIDDEN
         return None
     return available_permissions
@@ -597,7 +597,7 @@ def get_users(user: hug.directives.user = None, response=None):
     :return: a list of users or None
     """
     if user and (not is_admin(user)):
-        logger.debug("%s tried to get users but is not admin", user.name)
+        logger.debug("%s tried to get users but is not admin", user['name'])
         response.status = falcon.HTTP_FORBIDDEN
         return None
     db = _get_db_conn()
@@ -627,14 +627,14 @@ def grant_permission(target_username, permission: hug.types.json, user: hug.dire
     :return: 'OK', error message or None
     """
     if not is_admin(user):
-        logger.debug("%s tried to grant a permission %s to %s but is not admin.", user.name, permission,
+        logger.debug("%s tried to grant a permission %s to %s but is not admin.", user['name'], permission,
                      target_username)
         response.status = falcon.HTTP_FORBIDDEN
         return None
     target_username = target_username.strip().lower()
     client = _get_client(target_username)
     if not client:
-        logger.debug("%s tried to grant permission to unknown user %s", user.name, target_username)
+        logger.debug("%s tried to grant permission to unknown user %s", user['name'], target_username)
         response.status = falcon.HTTP_400
         return "unknown target user"
     permissions = client.permissions
@@ -660,14 +660,14 @@ def revoke_permission(target_username, permission: hug.types.json, user: hug.dir
     :return: 'OK' or error_message or None
     """
     if not is_admin(user):
-        logger.debug("%s tried to revoke a permission %s from %s but is not admin.", user.name, permission,
+        logger.debug("%s tried to revoke a permission %s from %s but is not admin.", user['name'], permission,
                      target_username)
         response.status = falcon.HTTP_FORBIDDEN
         return None
     target_username = target_username.strip().lower()
     client = _get_client(target_username)
     if not client:
-        logger.debug("%s tried to revoke permission from unknown user %s", user.name, target_username)
+        logger.debug("%s tried to revoke permission from unknown user %s", user['name'], target_username)
         response.status = falcon.HTTP_400
         return "unknown target user"
     permissions = client.permissions
@@ -691,11 +691,11 @@ def _exit():
 @hug.put(requires=authentication)
 def exit_bot(user: hug.directives.user, response=None):
     if not has_permission(user, ["admin", "exit"]):
-        logger.debug("%s called exit but is not admin", user.name)
+        logger.debug("%s called exit but is not admin", user['name'])
         response.status = falcon.HTTP_FORBIDDEN
         return None
 
-    logger.debug("%s called exit", user.name)
+    logger.debug("%s called exit", user['name'])
     async_handler.submit(_exit)
     return "OK"
 
@@ -703,11 +703,11 @@ def exit_bot(user: hug.directives.user, response=None):
 @hug.put(requires=authentication)
 def reset_bot(user: hug.directives.user, response=None):
     if not has_permission(user, ["admin", "reset"]):
-        logger.debug("%s called reset but is not permitted", user.name)
+        logger.debug("%s called reset but is not permitted", user['name'])
         response.status = falcon.HTTP_FORBIDDEN
         return None
 
-    logger.debug("%s called reset", user.name)
+    logger.debug("%s called reset", user['name'])
 
     for api_name in music_api_names:
         api = music_api_names[api_name]
