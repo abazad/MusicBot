@@ -36,7 +36,9 @@ def get_secrets_dir():
     return path.expanduser(_config.get("secrets_location", "config"))
 
 
-salt_path = path.join(get_secrets_dir(), "salt.txt")
+def _get_secrets_path():
+    return path.join(get_secrets_dir(), "secrets.dat")
+
 
 if _version.debug:
     _secrets_password = "testpw"
@@ -45,13 +47,15 @@ else:
     _secrets_password = None
     while not _confirmed:
         _secrets_password = getpass("Enter secrets password: ")
-        if not path.isfile(salt_path):
+        if not path.isfile(_get_secrets_path()):
             # Reconfirm password if it's new
             _confirm_password = getpass("Reconfirm secrets password: ")
             if _secrets_password != _confirm_password:
                 print("Passwords don't match, please try again.")
                 continue
         _confirmed = True
+
+salt_path = path.join(get_secrets_dir(), "salt.txt")
 
 if path.isfile(salt_path):
     with open(salt_path, 'rb') as salt_file:
@@ -69,10 +73,6 @@ kdf = PBKDF2HMAC(
     backend=default_backend()
 )
 key = base64.urlsafe_b64encode(kdf.derive(_secrets_password.encode()))
-
-
-def _get_secrets_path():
-    return path.join(get_secrets_dir(), "secrets.dat")
 
 
 def _load_jwt_secrets():
