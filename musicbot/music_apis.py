@@ -606,25 +606,13 @@ class GMusicAPI(AbstractSongProvider):
 
                     secrets = config.get_secrets()
 
-                    try:
-                        gmusic_user = secrets['gmusic_username']
-                    except KeyError as e:
-                        gmusic_user = input("Enter your Google username: ").strip()
-                        if gmusic_user:
-                            secrets['gmusic_username'] = gmusic_user
-                            config.save_secrets()
-                        else:
-                            raise ValueError("Empty Google username")
+                    gmusic_user = config.request_secret("gmusic_username", "Enter your Google username: ", False)
+                    if not gmusic_user:
+                        raise ValueError("Empty Google username")
 
-                    try:
-                        gmusic_password = secrets['gmusic_password']
-                    except KeyError as e:
-                        gmusic_password = getpass("Enter your Google password: ").strip()
-                        if gmusic_password:
-                            secrets['gmusic_password'] = gmusic_password
-                            config.save_secrets()
-                        else:
-                            raise ValueError("Empty Google password")
+                    gmusic_password = config.request_secret("gmusic_password", "Enter your Google password: ")
+                    if not gmusic_password:
+                        raise ValueError("Empty Google password")
 
                     try:
                         gmusic_device_id = secrets['gmusic_device_id']
@@ -634,7 +622,7 @@ class GMusicAPI(AbstractSongProvider):
                         if choice == "1":
                             gmusic_device_id = Mobileclient.FROM_MAC_ADDRESS
                         elif choice == "2":
-                            gmusic_device_id = input(
+                            gmusic_device_id = getpass(
                                 "Enter a device ID (leave empty to show all registered devices): ").strip()
                             if gmusic_device_id:
                                 if gmusic_device_id.startswith("0x"):
@@ -644,15 +632,10 @@ class GMusicAPI(AbstractSongProvider):
                         else:
                             raise ValueError("No GMusic device ID chosen")
 
-                    missing_device_id = False
                     if not gmusic_device_id:
-                        missing_device_id = True
-                        gmusic_device_id = Mobileclient.FROM_MAC_ADDRESS
+                        if not api.login(gmusic_user, gmusic_password, Mobileclient.FROM_MAC_ADDRESS, gmusic_locale):
+                            raise ValueError("Could not log in to GMusic")
 
-                    if not api.login(gmusic_user, gmusic_password, gmusic_device_id, gmusic_locale):
-                        raise ValueError("Could not log in to GMusic")
-
-                    if missing_device_id:
                         devices = api.get_registered_devices()
                         api.logout()
                         logger = logging.getLogger("musicbot")
@@ -660,6 +643,8 @@ class GMusicAPI(AbstractSongProvider):
                         logger.error(json.dumps(devices, indent=4, sort_keys=True))
                         raise ValueError("Missing device ID in secrets")
 
+                    if not api.login(gmusic_user, gmusic_password, gmusic_device_id, gmusic_locale):
+                        raise ValueError("Could not log in to GMusic")
                     cls._api = api
         finally:
             if locked:
@@ -673,17 +658,10 @@ class YouTubeAPI(AbstractAPI):
 
     def __init__(self):
         super().__init__()
-        secrets = config.get_secrets()
-        try:
-            self._api_key = secrets['youtube_api_key']
-        except KeyError:
-            api_key = input("Enter YouTube API key: ").strip()
-            if api_key:
-                self._api_key = api_key
-                secrets['youtube_api_key'] = api_key
-                config.save_secrets()
-            else:
-                raise ValueError("Missing YouTube API key")
+        self._api_key = config.request_secret("youtube_api_key", "Enter YouTube API key: ")
+
+        if not self._api_key:
+            raise ValueError("Missing YouTube API key")
 
     def get_name(self):
         return "youtube"
@@ -850,16 +828,9 @@ class SoundCloudAPI(AbstractAPI):
         try:
             if locked:
                 if not cls._client:
-                    secrets = config.get_secrets()
-                    try:
-                        app_id = secrets['soundcloud_id']
-                    except KeyError:
-                        app_id = input("Enter SoundCloud App ID: ").strip()
-                        if app_id:
-                            secrets['soundcloud_id'] = app_id
-                            config.save_secrets()
-                        else:
-                            raise ValueError("Missing SoundCloud App ID")
+                    app_id = config.request_secret("soundcloud_id", "Enter SoundCloud App ID: ")
+                    if not app_id:
+                        raise ValueError("Missing SoundCloud App ID")
                     client = cls._soundcloud.Client(client_id=app_id)
                     cls._client = client
         finally:

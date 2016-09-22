@@ -43,20 +43,12 @@ class TelegramBot(notifier.Subscribable):
         self._sent_keyboard = {}
         self._sent_keyboard_message_ids = {}
 
-        secrets = config.get_secrets()
-
         token_key = "telegram_" + music_api.get_name() + "_bot_token"
-        if token_key in secrets:
-            token = secrets[token_key]
-        else:
-            # Ask for token input
-            token = input("Please provide a telegram token for the {} bot (leave empty if unwanted): ".format(
-                music_api.get_pretty_name()))
-            token = token.strip()
-            if not token:
-                raise ValueError("No token given")
-            secrets[token_key] = token
-            config.save_secrets()
+        token = config.request_secret(token_key,
+                                      "Please provide a telegram token for the {} bot (leave empty if unwanted): ".format(
+                                          music_api.get_pretty_name()))
+        if not token:
+            raise ValueError("No token given")
 
         self._updater = updater.Updater(token=token)
 
@@ -451,7 +443,7 @@ class TelegramBot(notifier.Subscribable):
         self._song_provider.reset()
         del config.get_secrets()['telegram_admin_chat_id']
         config.save_secrets()
-        
+
         def _exit():
             async_handler.shutdown(False)
             time.sleep(1)

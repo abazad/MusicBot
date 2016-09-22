@@ -36,12 +36,23 @@ def get_secrets_dir():
     return path.expanduser(_config.get("secrets_location", "config"))
 
 
+salt_path = path.join(get_secrets_dir(), "salt.txt")
+
 if _version.debug:
     _secrets_password = "testpw"
 else:
-    _secrets_password = getpass("Enter secrets password: ")
+    _confirmed = False
+    _secrets_password = None
+    while not _confirmed:
+        _secrets_password = getpass("Enter secrets password: ")
+        if not path.isfile(salt_path):
+            # Reconfirm password if it's new
+            _confirm_password = getpass("Reconfirm secrets password: ")
+            if _secrets_password != _confirm_password:
+                print("Passwords don't match, please try again.")
+                continue
+        _confirmed = True
 
-salt_path = path.join(get_secrets_dir(), "salt.txt")
 if path.isfile(salt_path):
     with open(salt_path, 'rb') as salt_file:
         salt = salt_file.read()
@@ -190,6 +201,30 @@ def save_secrets():
     f = Fernet(key)
     with open(secrets_path, 'wb') as secrets_file:
         secrets_file.write(f.encrypt(json.dumps(_secrets).encode()))
+
+
+def request_secret(secret_key, message, hidden=True):
+    """
+    Request a secret from the user. Save the secrets to disk afterwards.
+    If there is already a secret for the key, return it.
+    :param secret_key: the key the input should be stored under in the secrets
+    :param message: the message to show to the user
+    :param hidden: hide the input (recommended for passwords and such)
+    :return the secret
+    """
+    if secret_key in _secrets:
+        return _secrets[secret_key]
+
+    if hidden:
+        secret = getpass(message)
+    else:
+        secret = input(message)
+
+    if secret.strip():
+        _secrets[secret_key] = secret.strip()
+        save_secrets()
+
+    return secret
 
 
 save_secrets()

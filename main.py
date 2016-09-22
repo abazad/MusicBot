@@ -134,8 +134,17 @@ if "--no-rest" not in sys.argv:
         app.router.add_route("*", "/{path_info:.*}", wsgi_handler)
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
 
-        _password = getpass("Enter SSL key password: ")
-        ssl_context.load_cert_chain(cert_path, key_path, password=_password)
+        _ssl_attempts = 3
+        while _ssl_attempts:
+            try:
+                ssl_context.load_cert_chain(cert_path, key_path, password=lambda: getpass("Enter SSL key password: "))
+                break
+            except ssl.SSLError as e:
+                logger.info("Wrong SSL key password. Try again.")
+                _ssl_attempts -= 1
+                if not _ssl_attempts:
+                    raise e
+
         queued_player.run()
 
 
