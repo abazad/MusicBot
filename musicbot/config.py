@@ -128,7 +128,7 @@ def _load_secrets():
         return {}
     f = Fernet(key)
     with open(secrets_path, 'rb') as secrets_file:
-        return json.loads(str(f.decrypt(_secrets_password, secrets_file.read())))
+        return json.loads(f.decrypt(secrets_file.read()).decode())
 
 
 _secrets = _load_secrets()
