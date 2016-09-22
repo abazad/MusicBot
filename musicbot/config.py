@@ -26,7 +26,7 @@ def _load_config():
 def _save_config():
     config_path = path.join(_config_dir, "config.json")
     with open(config_path, 'w') as config_file:
-        return config_file.write(json.dumps(_config))
+        return config_file.write(json.dumps(_config, indent=4, sort_keys=True))
 
 
 _config = _load_config()
