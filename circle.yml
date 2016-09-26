@@ -4,7 +4,7 @@ machine:
     
 dependencies:
   pre:
-    - sudo apt-get install libssl-dev libffi-dev libasound2-dev libav-tools -y
+    - sudo apt-get install libssl-dev libffi-dev libasound2-dev libav-tools portaudio19-dev libportaudio2 -y
     
   post:
     - python prep_tests.py

@@ -3,7 +3,6 @@ gmusicapi
 youtube-dl
 pafy
 pydub
-simpleaudio
 pylru
 soundcloud
 colorama
@@ -13,3 +12,4 @@ pyjwt
 bcrypt
 aiohttp_wsgi
 cryptography
+pyaudio

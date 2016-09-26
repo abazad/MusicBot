@@ -23,7 +23,7 @@ class TestSong(unittest.TestCase):
         def get_name(self):
             return "testapi"
 
-        def load_song(self, song):
+        def _download(self, song):
             return "test.wav"
 
     def _create_test_songs(self):
@@ -51,7 +51,7 @@ class TestSong(unittest.TestCase):
 
     def test_load(self):
         song = Song("testid", TestSong._TestAPI())
-        self.assertEqual("test.wav", song.load())
+        self.assertEqual(os.path.normpath("songs/testid.mp3"), os.path.normpath(song.load()))
 
     def test_song_id(self):
         song = Song("testid", TestSong._TestAPI())

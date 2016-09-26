@@ -12,8 +12,9 @@ from os.path import isfile
 import pylru
 from gmusicapi.clients.mobileclient import Mobileclient
 from gmusicapi.exceptions import CallFailure
-from pydub import AudioSegment, effects
+from pydub import AudioSegment
 
+import _version
 from musicbot import config
 
 _songs_path = config.get_songs_path()
@@ -23,12 +24,6 @@ _download_semaphore = threading.Semaphore(_max_downloads)
 _conversion_semaphore = threading.Semaphore(_max_conversions)
 _loading_ids = {}
 _loading_ids_lock = threading.Lock()
-
-try:
-    if not os.path.isdir(_songs_path):
-        os.makedirs(_songs_path)
-except OSError:
-    raise ValueError("Invalid song path: " + _songs_path)
 
 
 class Song(object):
@@ -79,9 +74,15 @@ class Song(object):
             self.title = self._str_rep
 
     def load(self):
+        try:
+            if not os.path.isdir(_songs_path):
+                os.makedirs(_songs_path)
+        except OSError:
+            raise ValueError("Invalid song path: " + _songs_path)
+
         songs_path = _songs_path  # TODO delete / refactor
         song_id = self.song_id
-        fname = os.path.join(songs_path, ".".join([song_id, "wav"]))
+        fname = os.path.join(songs_path, ".".join([song_id, "mp3"]))
 
         loading_ids_lock = _loading_ids_lock  # TODO delete / refactor
 
@@ -103,21 +104,25 @@ class Song(object):
             loading_ids_lock.release()
 
         if not isfile(fname):
-            with _download_semaphore:
-                try:
-                    native_fname = self._api._download(self)
-                except Exception as e:
-                    logging.getLogger("musicbot").exception("Exception during download of %s", song_id)
-                    raise e
+            try:
+                with _download_semaphore:
+                    native_fname = self.api._download(self)
+            except Exception as e:
+                logging.getLogger("musicbot").exception("Exception during download of %s", song_id)
+                raise e
 
             with _conversion_semaphore:
-                if not isfile(fname):
+                if not _version.debug or isfile(native_fname):
                     song = AudioSegment.from_file(native_fname, native_fname.split(".")[-1])
-                    song = effects.normalize(song)
+                    # TODO normalization seems to cause a stutter of the playback
+                    # song = effects.normalize(song)
                     fname_tmp = fname + ".tmp"
                     if isfile(fname_tmp):
                         os.remove(fname_tmp)
-                    song.export(fname_tmp, "wav")
+                    song.export(fname_tmp, "mp3",
+                                tags={"title": self.title, "artist": self.description},
+                                id3v2_version="3",
+                                bitrate="320k")
                     os.remove(native_fname)
                     os.rename(fname_tmp, fname)
 
@@ -228,6 +233,7 @@ class AbstractAPI(object):
     def _download(self, song):
         """
         Download a song and return its filename.
+        The filename ALWAYS starts with a 'native_' prefix.
         :param song: the song to download
         :return: the songs filename
         """
@@ -530,7 +536,7 @@ class GMusicAPI(AbstractSongProvider):
         if song.api != self:
             raise ValueError("Tried to download song %s with wrong API %s", song, self.get_name())
         song_id = song.song_id
-        native_fname = os.path.join(_songs_path, ".".join([song_id, "mp3"]))
+        native_fname = os.path.join(_songs_path, ".".join(["native_" + song_id, "mp3"]))
         if isfile(native_fname):
             return native_fname
         native_fname_tmp = native_fname + ".tmp"
@@ -701,7 +707,7 @@ class YouTubeAPI(AbstractAPI):
             logging.getLogger("musicbot").exception("Error loading url: %s", url)
             raise e
         audio = video.getbestaudio()
-        native_fname = os.path.join(_songs_path, ".".join([song_id, audio.extension]))
+        native_fname = os.path.join(_songs_path, ".".join(["native_" + song_id, audio.extension]))
         if isfile(native_fname):
             return native_fname
         native_fname_tmp = native_fname + ".tmp"
@@ -763,7 +769,7 @@ class SoundCloudAPI(AbstractAPI):
         if song.api != self:
             raise ValueError("Tried to download song %s with wrong API %s", song, self.get_name())
         song_id = song.song_id
-        native_fname = os.path.join(_songs_path, ".".join([song_id, "mp3"]))
+        native_fname = os.path.join(_songs_path, ".".join(["native_" + song_id, "mp3"]))
         if isfile(native_fname):
             return native_fname
         native_fname_tmp = native_fname + ".tmp"

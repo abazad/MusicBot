@@ -429,7 +429,7 @@ def player_state():
     return {"current_song": song_json,
             "last_played": list(map(Song.to_json, player.get_last_played())),
             "queue": list(map(Song.to_json, queue)),
-            "paused": player._pause}
+            "paused": player.is_paused()}
 
 
 @hug.put(requires=authentication)

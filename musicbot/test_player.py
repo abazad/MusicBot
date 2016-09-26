@@ -19,8 +19,8 @@ class TestSongProvider(AbstractSongProvider):
         self._loader = loader
         self.counter = 0
 
-    def load_song(self, song):
-        return self._loader(song.song_id)()
+    def _download(self, song):
+        return self._loader(song.song_id)
 
     def get_song(self):
         song_id = "test" + str(self.counter)
@@ -43,10 +43,7 @@ class TestSongProvider(AbstractSongProvider):
 class TestSongQueue(unittest.TestCase):
     @classmethod
     def _loader(cls, song_id):
-        def _loader():
-            return song_id + ".wav"
-
-        return _loader
+        return song_id + ".wav"
 
     def setUp(self):
         self.queue = SongQueue(self.song_provider)

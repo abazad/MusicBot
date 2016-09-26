@@ -1,6 +1,9 @@
 import logging
 import threading
-import time
+
+import pyaudio
+import pydub
+from pydub.utils import make_chunks
 
 from musicbot import async_handler
 from musicbot.music_apis import AbstractSongProvider
@@ -42,7 +45,7 @@ class SongQueue(list):
                 result.api.add_played(result)
         except IndexError:
             result = self._song_provider.get_song()
-            self._prepare_event.set()
+        self._prepare_event.set()
         return result
 
     def append(self, song):
@@ -63,14 +66,15 @@ class SongQueue(list):
 
 class Player(object):
     def __init__(self, song_provider):
-        import simpleaudio
-        self._sa = simpleaudio
-        self._player = None
+        self._pa = pyaudio.PyAudio()
         self._stop = False
-        self._pause = False
+        self._resume_event = threading.Event()
+        self._resume_event.set()
+        self._skip = False
         self._last_played = []
         self._queue = SongQueue(song_provider)
         self._current_song = None
+        self._current_segment = None
         self._lock = threading.Lock()
         self._next_chosen_event = threading.Event()
 
@@ -85,21 +89,19 @@ class Player(object):
         Notifier.notify(Cause.queue_remove(song))
 
     def pause(self):
-        self._pause = True
-        if self._player:
-            self._player.stop()
+        self._resume_event.clear()
 
     def resume(self):
-        self._pause = False
+        self._resume_event.set()
 
     def next(self):
         '''
         Skip to the next song.
         Block until the next song is actually playing.
-        If the player is paused, do nothing.
         '''
-        if not self._pause:
-            self._on_song_end()
+        self._on_song_end()
+        self._skip = True
+        self._resume_event.set()
 
     def get_current_song(self):
         return self._current_song
@@ -137,35 +139,47 @@ class Player(object):
                     pass
 
             fname = song.load()
-
-            wave_obj = self._sa.WaveObject.from_wave_file(fname)
-            if self._player:
-                self._player.stop()
-            if self._pause:
-                logger.debug("Skipping play because player was paused (%s)", thread_name)
-            else:
-                self._player = wave_obj.play()
-            self._next_chosen_event.set()
+            seg = pydub.AudioSegment.from_mp3(fname)
             self._current_song = song
+            self._current_segment = seg
+            self._next_chosen_event.set()
 
             Notifier.notify(Cause.current_song(song))
 
             logger.debug("LEAVING _on_song_end (%s)", thread_name)
 
     def run(self):
+        _pa = self._pa
+        _done_event = threading.Event()
+        logger = logging.getLogger("musicbot")
+
+        def _open_stream(seg):
+            return _pa.open(format=_pa.get_format_from_width(seg.sample_width),
+                            channels=seg.channels,
+                            rate=seg.frame_rate,
+                            output=True)
+
         def _run():
             while not self._stop:
-                if self._pause:
-                    time.sleep(1)
-                else:
-                    self._on_song_end()
-                    self._next_chosen_event = threading.Event()
-                    self._player.wait_done()
+                self._on_song_end()
+                self._next_chosen_event = threading.Event()
+                self._skip = False
+                # Play song
+                seg = self._current_segment
+                stream = _open_stream(seg)
+                for chunk in make_chunks(seg, 1000):
+                    self._resume_event.wait()
+                    if self._stop or self._skip:
+                        break
+                    stream.write(chunk.raw_data)
+                stream.close()
+            _done_event.set()
 
         def _stop():
             self._stop = True
-            if self._player:
-                self._player.stop()
+            self._resume_event.set()
+            _done_event.wait()
+            _pa.terminate()
 
         async_handler.execute(_run, _stop, name="player_thread")
 
@@ -175,3 +189,6 @@ class Player(object):
 
     def get_last_played(self):
         return self._last_played
+
+    def is_paused(self):
+        return not self._resume_event.is_set()
