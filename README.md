@@ -21,7 +21,7 @@ You can add custom commands by following the instructions on the [Adding command
   - [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
   - [gmusicapi](https://github.com/simon-weber/gmusicapi)
   - [pydub](https://github.com/jiaaro/pydub)
-  - [simpleaudio](https://github.com/hamiltron/py-simple-audio)
+  - [pyaudio](https://people.csail.mit.edu/hubert/pyaudio/)
   - [pylru](https://github.com/jlhutch/pylru)
   - [cryptography](https://github.com/pyca/cryptography)
   - If you want to be able to queue youtube songs
