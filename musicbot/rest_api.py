@@ -434,7 +434,7 @@ def player_state():
 
 @hug.put(requires=authentication)
 def toggle_pause(user: hug.directives.user):
-    if player._pause:
+    if player.is_paused():
         logger.debug("Resumed by %s", user['name'])
         player.resume()
     else:
