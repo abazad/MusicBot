@@ -7,6 +7,7 @@ import time
 import urllib
 from datetime import datetime
 from getpass import getpass
+from os.path import isfile
 
 import pylru
 from gmusicapi.clients.mobileclient import Mobileclient
@@ -15,9 +16,27 @@ from pydub import AudioSegment, effects
 
 from musicbot import config
 
+_songs_path = config.get_songs_path()
+_max_downloads = max(config.get_max_downloads(), 1)
+_max_conversions = max(config.get_max_conversions(), 1)
+_download_semaphore = threading.Semaphore(_max_downloads)
+_conversion_semaphore = threading.Semaphore(_max_conversions)
+_loading_ids = {}
+_loading_ids_lock = threading.Lock()
+
+try:
+    if not os.path.isdir(_songs_path):
+        os.makedirs(_songs_path)
+except OSError:
+    raise ValueError("Invalid song path: " + _songs_path)
+
 
 class Song(object):
-    def __init__(self, song_id, api, title=None, description=None, albumArtUrl=None, str_rep=None, duration=None, user=None):
+    _download_semaphore = None
+    _conversion_semaphore = None
+
+    def __init__(self, song_id, api, title=None, description=None, albumArtUrl=None, str_rep=None, duration=None,
+                 user=None):
         '''
         Constructor
 
@@ -60,15 +79,56 @@ class Song(object):
             self.title = self._str_rep
 
     def load(self):
-        '''
-        Load the song, convert it to wav and return the path to the song file.
-        '''
-        if not self.api:
-            raise NotImplementedError()
+        songs_path = _songs_path  # TODO delete / refactor
+        song_id = self.song_id
+        fname = os.path.join(songs_path, ".".join([song_id, "wav"]))
 
-        fname = self.api.load_song(self)
-        # When the song has been loaded, this method can be replaced by a simple method returning the filename
-        self.load = lambda: fname
+        loading_ids_lock = _loading_ids_lock  # TODO delete / refactor
+
+        # Acquire a lock to access self._loading_ids
+        loading_ids_lock.acquire()
+        try:
+            # If another thread is loading the same song, there is an event in _loading_ids to wait for
+            event = _loading_ids[song_id]
+            loading_ids_lock.release()
+            # Wait for the loading thread to call event.set().
+            # Since we released the loading_ids_lock before this, the event may already be set.
+            # In that case, the wait() call will return immediately.
+            event.wait()
+            return fname
+        except KeyError:
+            # There is no other thread loading this song (yet), so we can create a new
+            # event for this song to set at the end of the method.
+            _loading_ids[song_id] = threading.Event()
+            loading_ids_lock.release()
+
+        if not isfile(fname):
+            with _download_semaphore:
+                try:
+                    native_fname = self._api._download(self)
+                except Exception as e:
+                    logging.getLogger("musicbot").exception("Exception during download of %s", song_id)
+                    raise e
+
+            with _conversion_semaphore:
+                if not isfile(fname):
+                    song = AudioSegment.from_file(native_fname, native_fname.split(".")[-1])
+                    song = effects.normalize(song)
+                    fname_tmp = fname + ".tmp"
+                    if isfile(fname_tmp):
+                        os.remove(fname_tmp)
+                    song.export(fname_tmp, "wav")
+                    os.remove(native_fname)
+                    os.rename(fname_tmp, fname)
+
+        loading_ids_lock.acquire()
+        # Get the event other threads are possibly waiting for
+        event = _loading_ids[song_id]
+        del _loading_ids[song_id]
+        # Set the event. We removed it from _loading_ids so it will soon be garbage collected.
+        event.set()
+        loading_ids_lock.release()
+
         self.loaded = True
         return fname
 
@@ -136,23 +196,6 @@ class Song(object):
 
 
 class AbstractAPI(object):
-    _download_semaphore = None
-    _conversion_semaphore = None
-
-    def __init__(self):
-        songs_path = config.get_songs_path()
-
-        try:
-            if not os.path.isdir(songs_path):
-                os.makedirs(songs_path)
-        except OSError:
-            raise ValueError("Invalid song path: " + songs_path)
-
-        self._songs_path = songs_path
-        self._create_semaphores()
-        self._loading_ids = {}
-        self._loading_ids_lock = threading.Lock()
-
     def get_name(self):
         '''
         Return the unique name of this API.
@@ -182,98 +225,13 @@ class AbstractAPI(object):
         '''
         raise NotImplementedError()
 
-    def load_song(self, song):
-        '''
-        Load a song and return its filename
-        '''
+    def _download(self, song):
+        """
+        Download a song and return its filename.
+        :param song: the song to download
+        :return: the songs filename
+        """
         raise NotImplementedError()
-
-    def _get_thread_safe_loader(self, song_id, native_format, download):
-        '''
-        Return a song loader.
-
-        Keyword arguments:
-        song_id -- the song ID
-        native_format -- the native format the downloaded file will have (file extension), can be a function
-        download -- a function accepting only a target path which downloads the song with the song_id
-        '''
-
-        def _loader():
-            if isinstance(native_format, str):
-                _native_format = native_format
-            elif hasattr(native_format, "__call__"):
-                _native_format = native_format()
-            else:
-                raise ValueError("native_format has to be a string or a function returning a string")
-
-            songs_path = self._songs_path
-            fname = os.path.join(songs_path, ".".join([song_id, "wav"]))
-            native_fname = os.path.join(songs_path, ".".join([song_id, _native_format]))
-
-            loading_ids_lock = self._loading_ids_lock
-
-            # Acquire a lock to access self._loading_ids
-            loading_ids_lock.acquire()
-            try:
-                # If another thread is loading the same song, there is an event in _loading_ids to wait for
-                event = self._loading_ids[song_id]
-                loading_ids_lock.release()
-                # Wait for the loading thread to call event.set().
-                # Since we released the loading_ids_lock before this, the event may already be set.
-                # In that case, the wait() call will return immediately.
-                event.wait()
-                return fname
-            except KeyError:
-                # There is no other thread loading this song (yet), so we can create a new
-                # event for this song to set at the end of the method.
-                self._loading_ids[song_id] = threading.Event()
-                loading_ids_lock.release()
-
-            isfile = os.path.isfile
-            if not isfile(fname):
-                if not isfile(native_fname):
-                    with self._download_semaphore:
-                        if not isfile(native_fname):
-                            native_fname_tmp = native_fname + ".tmp"
-                            if isfile(native_fname_tmp):
-                                os.remove(native_fname_tmp)
-
-                            try:
-                                download(native_fname_tmp)
-                            except Exception as e:
-                                logging.getLogger("musicbot").exception("Exception during download of %s", song_id)
-                                raise e
-                            os.rename(native_fname_tmp, native_fname)
-
-                with self._conversion_semaphore:
-                    if not isfile(fname):
-                        song = AudioSegment.from_file(native_fname, _native_format)
-                        song = effects.normalize(song)
-                        fname_tmp = fname + ".tmp"
-                        if isfile(fname_tmp):
-                            os.remove(fname_tmp)
-                        song.export(fname_tmp, "wav")
-                        os.remove(native_fname)
-                        os.rename(fname_tmp, fname)
-
-            loading_ids_lock.acquire()
-            # Get the event other threads are possibly waiting for
-            event = self._loading_ids[song_id]
-            del self._loading_ids[song_id]
-            # Set the event. We removed it from _loading_ids so it will soon be garbage collected.
-            event.set()
-            loading_ids_lock.release()
-            return fname
-
-        return _loader
-
-    @classmethod
-    def _create_semaphores(cls):
-        if not cls._download_semaphore or not cls._conversion_semaphore:
-            max_downloads = max(config.get_max_downloads(), 1)
-            max_conversions = max(config.get_max_conversions(), 1)
-            cls._download_semaphore = threading.Semaphore(max_downloads)
-            cls._conversion_semaphore = threading.Semaphore(max_conversions)
 
 
 class AbstractSongProvider(AbstractAPI):
@@ -375,11 +333,6 @@ class GMusicAPI(AbstractSongProvider):
         for track in results['song_hits']:
             info = track['track']
             yield _song_from_info(info)
-
-    def load_song(self, song):
-        if song.api != self:
-            raise ValueError("tried to load song not created by this API")
-        return self._get_loader(song.song_id)()
 
     def set_quality(self, quality):
         if not quality:
@@ -573,8 +526,18 @@ class GMusicAPI(AbstractSongProvider):
         songs[song_id] = song
         return song
 
-    def _get_loader(self, song_id):
-        def _download(path):
+    def _download(self, song):
+        if song.api != self:
+            raise ValueError("Tried to download song %s with wrong API %s", song, self.get_name())
+        song_id = song.song_id
+        native_fname = os.path.join(_songs_path, ".".join([song_id, "mp3"]))
+        if isfile(native_fname):
+            return native_fname
+        native_fname_tmp = native_fname + ".tmp"
+        if isfile(native_fname_tmp):
+            os.remove(native_fname_tmp)
+
+        try:
             attempts = 3
             url = None
             while attempts and not url:
@@ -593,10 +556,13 @@ class GMusicAPI(AbstractSongProvider):
 
                 request = urllib.request.Request(url)
                 with urllib.request.urlopen(request) as page:
-                    with open(path, "wb") as file:
+                    with open(native_fname_tmp, "wb") as file:
                         file.write(page.read())
-
-        return self._get_thread_safe_loader(song_id, "mp3", _download)
+        except Exception as e:
+            logging.getLogger("musicbot").exception("Exception during download of %s", song_id)
+            raise e
+        os.rename(native_fname_tmp, native_fname)
+        return native_fname
 
     @classmethod
     def _connect(cls):
@@ -724,29 +690,26 @@ class YouTubeAPI(AbstractAPI):
         for track in songs:
             yield _track_to_song(track)
 
-    def load_song(self, song):
+    def _download(self, song):
         if song.api != self:
-            raise ValueError("tried to load song not created by this API")
-        return self._get_loader(song.song_id)()
-
-    def _get_loader(self, song_id):
-        audio = None
-
-        def _get_audio_extension():
-            nonlocal audio
-            url = "https://www.youtube.com/watch?v=" + song_id
-            try:
-                video = self._pafy.new(url)
-            except TypeError as e:
-                logging.getLogger("musicbot").exception("Error loading url: %s", url)
-                raise e
-            audio = video.getbestaudio()
-            return audio.extension
-
-        def _download(path):
-            audio.download(filepath=path, quiet=True)
-
-        return self._get_thread_safe_loader(song_id, _get_audio_extension, _download)
+            raise ValueError("Tried to download song %s with wrong API %s", song, self.get_name())
+        song_id = song.song_id
+        url = "https://www.youtube.com/watch?v=" + song_id
+        try:
+            video = self._pafy.new(url)
+        except TypeError as e:
+            logging.getLogger("musicbot").exception("Error loading url: %s", url)
+            raise e
+        audio = video.getbestaudio()
+        native_fname = os.path.join(_songs_path, ".".join([song_id, audio.extension]))
+        if isfile(native_fname):
+            return native_fname
+        native_fname_tmp = native_fname + ".tmp"
+        if isfile(native_fname_tmp):
+            os.remove(native_fname_tmp)
+        audio.download(filepath=native_fname_tmp, quiet=True)
+        os.rename(native_fname_tmp, native_fname)
+        return native_fname
 
 
 class SoundCloudAPI(AbstractAPI):
@@ -796,21 +759,25 @@ class SoundCloudAPI(AbstractAPI):
             except AttributeError:
                 break
 
-    def load_song(self, song):
+    def _download(self, song):
         if song.api != self:
-            raise ValueError("tried to load song not created by this API")
-        info = self._client.get("/tracks/{}".format(song.song_id))
-        return self._get_loader(song.song_id, info.stream_url)()
+            raise ValueError("Tried to download song %s with wrong API %s", song, self.get_name())
+        song_id = song.song_id
+        native_fname = os.path.join(_songs_path, ".".join([song_id, "mp3"]))
+        if isfile(native_fname):
+            return native_fname
+        native_fname_tmp = native_fname + ".tmp"
+        info = self._client.get("/tracks/{}".format(song_id))
+        stream_url = info.stream_url
+        url = self._client.get(stream_url, allow_redirects=False).location
 
-    def _get_loader(self, song_id, stream_url):
-        def _download(path):
-            url = self._client.get(stream_url, allow_redirects=False).location
-            request = urllib.request.Request(url)
-            with urllib.request.urlopen(request) as page:
-                with open(path, "wb") as file:
-                    file.write(page.read())
+        request = urllib.request.Request(url)
+        with urllib.request.urlopen(request) as page:
+            with open(native_fname_tmp, "wb") as file:
+                file.write(page.read())
 
-        return self._get_thread_safe_loader(song_id, "mp3", _download)
+        os.rename(native_fname_tmp, native_fname)
+        return native_fname
 
     def _song_from_info(self, info):
         song_id = str(info.id)
