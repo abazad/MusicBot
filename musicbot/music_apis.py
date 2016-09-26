@@ -25,7 +25,7 @@ class Song(object):
         song_id -- the unique ID of the song
         api -- an instance of AbstractAPI capable of loading this song
         title -- the song title
-        description -- a description of the title (e.g. 'by [artist]'
+        description -- a description of the title (can be the artist)
         albumArtUrl -- a URL to the album art
         str_rep -- a human readable string representation for this instance. Will be returned for __str__(). The song duration maybe will automatically appended.
         duration -- the song duration (as a string in the form [HH:]MM:SS)
@@ -448,7 +448,7 @@ class GMusicAPI(AbstractSongProvider):
         else:
             song_id = "Tj6fhurtstzgdpvfm4xv6i5cei4"
             fallback_song = Song(song_id, self,
-                                 "Biste braun kriegste Fraun", "by Mickie Krause",
+                                 "Biste braun kriegste Fraun", "Mickie Krause",
                                  str_rep="Mickie Krause - Biste braun kriegste Fraun")
             self._suggestions.append(fallback_song)
 
@@ -569,7 +569,7 @@ class GMusicAPI(AbstractSongProvider):
                 if "url" in ref:
                     url = ref["url"]
 
-        song = Song(song_id, self, title, "by " + artist, url, " - ".join([artist, title]), duration)
+        song = Song(song_id, self, title, artist, url, " - ".join([artist, title]), duration)
         songs[song_id] = song
         return song
 
@@ -822,7 +822,7 @@ class SoundCloudAPI(AbstractAPI):
         url = info.artwork_url
         duration_millis = info.duration
         duration = datetime.fromtimestamp(duration_millis / 1000).strftime("%M:%S")
-        song = Song(song_id, self, title, "by " + artist, url, " - ".join([artist, title]), duration=duration)
+        song = Song(song_id, self, title, artist, url, " - ".join([artist, title]), duration=duration)
         songs[song_id] = song
         return song
 
