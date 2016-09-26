@@ -141,7 +141,10 @@ class Player(object):
             wave_obj = self._sa.WaveObject.from_wave_file(fname)
             if self._player:
                 self._player.stop()
-            self._player = wave_obj.play()
+            if self._pause:
+                logger.debug("Skipping play because player was paused (%s)", thread_name)
+            else:
+                self._player = wave_obj.play()
             self._next_chosen_event.set()
             self._current_song = song
 
