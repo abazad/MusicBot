@@ -128,6 +128,7 @@ class Player(object):
                 return
 
             if not song.loaded:
+                logger.debug("First song not loaded")
                 try:
                     next_song = self._queue[0]
                     if next_song.loaded:
@@ -135,8 +136,12 @@ class Player(object):
                         self._queue.pop(0)
                         self._queue.insert(0, song)
                         song = next_song
+                    else:
+                        logger.debug("Second (%s) is not loaded")
                 except IndexError:
-                    pass
+                    logger.debug("No second song in queue")
+            else:
+                logger.debug("First song is loaded")
 
             fname = song.load()
             seg = pydub.AudioSegment.from_mp3(fname)
