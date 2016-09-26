@@ -94,10 +94,12 @@ class Player(object):
 
     def next(self):
         '''
-        Skips to the next song.
-        This method will block until the next song is actually playing.
+        Skip to the next song.
+        Block until the next song is actually playing.
+        If the player is paused, do nothing.
         '''
-        self._on_song_end()
+        if not self._pause:
+            self._on_song_end()
 
     def get_current_song(self):
         return self._current_song
