@@ -892,11 +892,19 @@ class OfflineAPI(AbstractSongProvider):
 
     def search_song(self, query, max_fetch=100):
         songs = self._songs
-        query_parts = query.lower().split(" ")
+        query_parts = query.strip().lower().split(" ")
 
         def _match(song):
+            title = song.title
+            description = song.description
+            song_str = title
+            if title:
+                song_str += " " + description
+            else:
+                song_str = description
+            song_str = song_str.lower()
             for part in query_parts:
-                if part in str(song):
+                if part in song_str:
                     return True
 
         return list(filter(_match, songs))
