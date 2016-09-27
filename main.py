@@ -67,49 +67,68 @@ if config.get_auto_updates_enabled():
 
 secrets = config.get_secrets()
 
+offline_mode = "--offline" in sys.argv
+
 music_api_list = []
 
-# Load Telegram Bots
-try:
-    gmusic_api = music_apis.GMusicAPI()
-    music_api_list.append(gmusic_api)
-except ValueError as e:
-    logger.critical("Error accessing GMusic. (%s)", e)
-    async_handler.shutdown()
-    sys.exit(3)
+# Load music APIs
+if offline_mode:
+    logger.info("Starting in offline mode. GMusic, YouTube and Soundcloud are unavailable.")
+    try:
+        offline_api = music_apis.OfflineAPI()
+        music_api_list.append(offline_api)
+    except ValueError as e:
+        logger.critical("Error loading offline API. (%s)", e)
+        async_handler.shutdown()
+        sys.exit(100)
 
-try:
-    soundcloud_api = music_apis.SoundCloudAPI()
-    music_api_list.append(soundcloud_api)
-except ValueError as e:
-    logger.warning("SoundCloud unavailable. (%s)", e)
-    soundcloud_api = None
+    queued_player = player.Player(offline_api)
+else:
+    try:
+        gmusic_api = music_apis.GMusicAPI()
+        music_api_list.append(gmusic_api)
+    except ValueError as e:
+        logger.critical("Error accessing GMusic. (%s)", e)
+        logger.info("Maybe try offline mode (--offline argument)")
+        async_handler.shutdown()
+        sys.exit(3)
 
-try:
-    youtube_api = music_apis.YouTubeAPI()
-    music_api_list.append(youtube_api)
-except ValueError as e:
-    logger.warning("YouTube unavailable. (%s)", e)
-    youtube_api = None
+    try:
+        soundcloud_api = music_apis.SoundCloudAPI()
+        music_api_list.append(soundcloud_api)
+    except ValueError as e:
+        logger.warning("SoundCloud unavailable. (%s)", e)
+        soundcloud_api = None
 
-queued_player = player.Player(gmusic_api)
+    try:
+        youtube_api = music_apis.YouTubeAPI()
+        music_api_list.append(youtube_api)
+    except ValueError as e:
+        logger.warning("YouTube unavailable. (%s)", e)
+        youtube_api = None
 
-try:
-    gmusic_bot = bot.TelegramBot(plugins, gmusic_api, gmusic_api, queued_player)
-except ValueError:
-    logger.info("GMusic telegram bot unavailable.")
+    queued_player = player.Player(gmusic_api)
 
-try:
-    if soundcloud_api:
-        soundcloud_bot = bot.TelegramBot(plugins, soundcloud_api, gmusic_api, queued_player)
-except ValueError:
-    logger.info("SoundCloud telegram bot unavailable.")
+# Load Telegram bots
+if offline_mode:
+    logger.info("Telegram bots unavailable in offline mode")
+else:
+    try:
+        gmusic_bot = bot.TelegramBot(plugins, gmusic_api, gmusic_api, queued_player)
+    except ValueError:
+        logger.info("GMusic telegram bot unavailable.")
 
-try:
-    if youtube_api:
-        youtube_bot = bot.TelegramBot(plugins, youtube_api, gmusic_api, queued_player)
-except ValueError:
-    logger.info("YouTube telegram bot unavailable.")
+    try:
+        if soundcloud_api:
+            soundcloud_bot = bot.TelegramBot(plugins, soundcloud_api, gmusic_api, queued_player)
+    except ValueError:
+        logger.info("SoundCloud telegram bot unavailable.")
+
+    try:
+        if youtube_api:
+            youtube_bot = bot.TelegramBot(plugins, youtube_api, gmusic_api, queued_player)
+    except ValueError:
+        logger.info("YouTube telegram bot unavailable.")
 
 if "--no-rest" not in sys.argv:
     import ssl
