@@ -858,6 +858,7 @@ class OfflineAPI(AbstractSongProvider):
         except (KeyError, IndexError):
             return None
         song = Song(song_id, self, title, artist, album_art, str_rep, duration)
+        song.loaded = True
         logging.getLogger("musicbot").debug("Loaded offline song: %s", song)
         return song
 
