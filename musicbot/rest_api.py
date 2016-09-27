@@ -388,6 +388,7 @@ def suggestions(api_name, max_fetch: hug.types.number = 10, response=None):
     try:
         api = music_api_names[api_name]
     except KeyError:
+        logger.debug("Requested suggestions for unknown API %s", api_name)
         response.status = falcon.HTTP_400
         return "Unknown API"
 
