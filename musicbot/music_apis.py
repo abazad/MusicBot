@@ -8,10 +8,12 @@ import urllib
 from datetime import datetime
 from getpass import getpass
 from os.path import isfile
+from random import choice
 
 import pylru
 from gmusicapi.clients.mobileclient import Mobileclient
 from gmusicapi.exceptions import CallFailure
+from mutagen.mp3 import EasyMP3
 from pydub import AudioSegment
 
 import _version
@@ -120,7 +122,10 @@ class Song(object):
                     if isfile(fname_tmp):
                         os.remove(fname_tmp)
                     song.export(fname_tmp, "mp3",
-                                tags={"title": self.title, "artist": self.description},
+                                tags={"title": self.title,
+                                      "artist": self.description,
+                                      "album": self.albumArtUrl,
+                                      "composer": str(self)},
                                 id3v2_version="3",
                                 bitrate="320k")
                     os.remove(native_fname)
@@ -813,3 +818,94 @@ class SoundCloudAPI(AbstractAPI):
         finally:
             if locked:
                 cls._connect_lock.release()
+
+
+class OfflineAPI(AbstractSongProvider):
+    def __init__(self):
+        super().__init__()
+        if not os.path.isdir(_songs_path):
+            raise ValueError("No offline songs found.")
+        else:
+            join = os.path.join
+            songs = []
+            song_ids = {}
+            for song_file_name in os.listdir(_songs_path):
+                song_path = join(_songs_path, song_file_name)
+                if not isfile(song_path) \
+                        or not song_file_name.endswith(".mp3") \
+                        or song_file_name.endswith(".tmp") \
+                        or song_file_name.startswith("native_"):
+                    continue
+                song_id = ".".join(song_file_name.split(".")[:-1])
+                song = self._try_load_song(song_id, song_path)
+                if song:
+                    song_ids[song.song_id] = song
+                    songs.append(song)
+            if not songs:
+                raise ValueError("No offline songs found.")
+            self._songs = songs
+            self._song_ids = song_ids
+
+    def _try_load_song(self, song_id, song_path):
+        audio = EasyMP3(song_path)
+        id3 = audio.tags
+        try:
+            title = id3['title'][0]
+            artist = id3['artist'][0]
+            str_rep = id3['composer'][0]
+            album_art = id3['album'][0]
+            duration = datetime.fromtimestamp(audio.info.length).strftime("%M:%S")
+        except (KeyError, IndexError):
+            return None
+        song = Song(song_id, self, title, artist, album_art, str_rep, duration)
+        logging.getLogger("musicbot").debug("Loaded offline song: %s", song)
+        return song
+
+    def get_name(self):
+        return "offline_api"
+
+    def get_pretty_name(self):
+        return "Offline"
+
+    def add_played(self, song):
+        pass
+
+    def reload(self):
+        pass
+
+    def _download(self, song):
+        if song.api != self:
+            raise ValueError("Tried to download song %s with wrong API %s", song, self.get_name())
+        return song.song_id + ".mp3"
+
+    def get_song(self):
+        return choice(self._songs)
+
+    def get_suggestions(self, max_len):
+        return [choice(self._songs) for i in range(0, max_len)]
+
+    def remove_from_playlist(self, song):
+        pass
+
+    def get_playlist(self):
+        return []
+
+    def search_song(self, query, max_fetch=100):
+        songs = self._songs
+        query_parts = query.lower().split(" ")
+
+        def _match(song):
+            for part in query_parts:
+                if part in str(song):
+                    return True
+
+        return list(filter(_match, songs))
+
+    def lookup_song(self, song_id):
+        try:
+            return self._song_ids[song_id]
+        except KeyError:
+            return None
+
+    def reset(self):
+        pass
