@@ -7,6 +7,7 @@ import time
 import urllib
 from datetime import datetime
 from getpass import getpass
+from json import JSONDecodeError
 from os.path import isfile
 from random import choice
 
@@ -315,6 +316,9 @@ class GMusicAPI(AbstractSongProvider):
         self._playlist = set()
         self._load_ids()
         self._remote_playlist_load()
+
+    def get_api(self):
+        return self._api
 
     def get_name(self):
         return "gmusic"
@@ -823,12 +827,12 @@ class SoundCloudAPI(AbstractAPI):
 class OfflineAPI(AbstractSongProvider):
     def __init__(self):
         super().__init__()
-        if not os.path.isdir(_songs_path):
-            raise ValueError("No offline songs found.")
-        else:
+
+        songs = []
+        song_ids = {}
+
+        if os.path.isdir(_songs_path):
             join = os.path.join
-            songs = []
-            song_ids = {}
             for song_file_name in os.listdir(_songs_path):
                 song_path = join(_songs_path, song_file_name)
                 if not isfile(song_path) \
@@ -841,10 +845,13 @@ class OfflineAPI(AbstractSongProvider):
                 if song:
                     song_ids[song.song_id] = song
                     songs.append(song)
-            if not songs:
-                raise ValueError("No offline songs found.")
-            self._songs = songs
-            self._song_ids = song_ids
+
+        self._songs = songs
+        self._song_ids = song_ids
+        self._active_playlist = None
+        self._playlists = self._load_playlists()
+        self._next_songs = []
+        self._last_played = []
 
     def _try_load_song(self, song_id, song_path):
         audio = EasyMP3(song_path)
@@ -862,34 +869,131 @@ class OfflineAPI(AbstractSongProvider):
         logging.getLogger("musicbot").debug("Loaded offline song: %s", song)
         return song
 
+    def _load_playlists(self):
+        playlists_path = os.path.join(_songs_path, "playlists.json")
+        if not isfile(playlists_path):
+            return set()
+
+        try:
+            with open(playlists_path, 'r') as playlists_file:
+                playlists_json = json.loads(playlists_file.read())
+                playlists = playlists_json['playlists']
+        except (IOError, JSONDecodeError, KeyError):
+            return set()
+
+        if "active_id" in playlists_json:
+            active_id = playlists_json['active_id']
+        else:
+            active_id = None
+
+        result = set()
+        for playlist_json in playlists:
+            try:
+                playlist = OfflineAPI._Playlist.from_json(self._song_ids, playlist_json)
+                if playlist.playlist_id == active_id:
+                    self._active_playlist = playlist
+            except ValueError:
+                logging.getLogger("musicbot").debug("Invalid playlist %s", json.dumps(playlist_json))
+                continue
+            result.add(playlist)
+        return result
+
+    def save_playlists(self):
+        playlists_path = os.path.join(_songs_path, "playlists.json")
+        playlists_json = {}
+        if self._active_playlist:
+            playlists_json['active_id'] = self._active_playlist.playlist_id
+        playlists_json['playlists'] = list(map(OfflineAPI._Playlist.to_json, self._playlists))
+        with open(playlists_path, 'w') as playlists_file:
+            playlists_file.write(json.dumps(playlists_json))
+
     def get_name(self):
         return "offline_api"
 
     def get_pretty_name(self):
         return "Offline"
 
-    def add_played(self, song):
-        pass
+    def add_played(self, song: Song):
+        self._last_played.append(song.song_id)
+        self._last_played = self._last_played[-50:]
 
     def reload(self):
         pass
 
-    def _download(self, song):
+    def _download(self, song: Song):
         if song.api != self:
             raise ValueError("Tried to download song %s with wrong API %s", song, self.get_name())
         return song.song_id + ".mp3"
 
-    def get_song(self):
-        return choice(self._songs)
+    def _load_next_songs(self, max_load=20):
+        """
+        Load the next songs up to max_load.
+        :param max_load: the maximum number of songs to load
+        """
+        if len(self._next_songs) >= max_load:
+            return
 
-    def get_suggestions(self, max_len):
-        return [choice(self._songs) for i in range(0, max_len)]
+        playlist = self._active_playlist
+        last_played = self._last_played
+        if not playlist:
+            self._next_songs.extend([choice(self._songs) for i in range(0, max_load)])
+            return
+
+        conflicts = 0
+        extender = []
+        while len(extender) < max_load and conflicts < 20:
+            store_id = choice(playlist.song_ids)
+            if store_id in last_played or store_id in extender:
+                conflicts += 1
+                continue
+            extender.append(store_id)
+        self._next_songs.extend(extender)
+
+    def get_song(self):
+        self._load_next_songs(1)
+        return self._next_songs.pop(0)
+
+    def get_suggestions(self, max_len=20):
+        self._load_next_songs(max_len)
+        return self._next_songs[:max_len]
+
+    def remove_playlist(self, playlist_id):
+        playlist = OfflineAPI._Playlist(playlist_id, "", set())
+        if playlist in self._playlists:
+            self._playlists.remove(playlist)
+
+    def add_playlist(self, playlist_id, name, song_ids):
+        self._playlists.add(OfflineAPI._Playlist(playlist_id, name, song_ids))
+
+    def add_to_playlist(self, song):
+        if self._active_playlist:
+            self._active_playlist.add(song)
 
     def remove_from_playlist(self, song):
-        pass
+        if self._active_playlist:
+            self._active_playlist.remove(song)
+
+    def get_available_playlists(self):
+        """
+        Get a list of available playlists
+        :return: a list of (playlist_id, playlist_name) tuples
+        """
+        return list(map(lambda playlist: (playlist.playlist_id, playlist.name), self._playlists))
+
+    def set_active_playlist(self, playlist_id):
+        for playlist in self._playlists:
+            if playlist.playlist_id == playlist_id:
+                self._active_playlist = playlist
+                self._next_songs = []
+                self._last_played = []
+                return
+        raise ValueError("Unknown playlist")
 
     def get_playlist(self):
-        return []
+        if self._active_playlist:
+            return list(self._active_playlist.song_ids)
+        else:
+            return []
 
     def search_song(self, query, max_fetch=100):
         songs = self._songs
@@ -917,4 +1021,44 @@ class OfflineAPI(AbstractSongProvider):
             return None
 
     def reset(self):
-        pass
+        self._active_playlist = None
+        self._last_played = []
+        os.remove(os.path.join(_songs_path, "playlists.json"))
+
+    class _Playlist(object):
+        def __init__(self, playlist_id, name, song_ids):
+            self.playlist_id = playlist_id
+            self.name = name
+            self.song_ids = set(song_ids)
+
+        def add(self, song):
+            self.song_ids.add(song)
+
+        def remove(self, song):
+            try:
+                self.song_ids.remove(song)
+            except KeyError:
+                pass
+
+        def to_json(self):
+            return {
+                "playlist_id": self.playlist_id,
+                "name": self.name,
+                "song_ids": list(self.song_ids)
+            }
+
+        @staticmethod
+        def from_json(song_ids, playlist_json):
+            try:
+                playlist_id = playlist_json['playlist_id']
+                name = playlist_json['name']
+                song_ids = set(filter(lambda song_id: song_id in song_ids, playlist_json['song_ids']))
+            except KeyError:
+                raise ValueError()
+            return OfflineAPI._Playlist(playlist_id, name, song_ids)
+
+        def __eq__(self, other):
+            return self.playlist_id == other.playlist_id
+
+        def __hash__(self):
+            return hash(self.playlist_id)
