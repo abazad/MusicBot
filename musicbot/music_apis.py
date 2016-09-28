@@ -4,6 +4,7 @@ import os
 import socket
 import threading
 import time
+import typing
 import urllib
 from datetime import datetime
 from getpass import getpass
@@ -33,9 +34,9 @@ class Song(object):
     _download_semaphore = None
     _conversion_semaphore = None
 
-    def __init__(self, song_id, api, title=None, description=None, albumArtUrl=None, str_rep=None, duration=None,
-                 user=None):
-        '''
+    def __init__(self, song_id: str, api, title=None, description=None, albumArtUrl=None, str_rep=None,
+                 duration=None, user=None):
+        """
         Constructor
 
         Keyword arguments:
@@ -47,7 +48,7 @@ class Song(object):
         str_rep -- a human readable string representation for this instance. Will be returned for __str__(). The song duration maybe will automatically appended.
         duration -- the song duration (as a string in the form [HH:]MM:SS)
         user -- a string describing which user queued this song (if applicable)
-        '''
+        """
         if not api:
             raise ValueError("api is None")
         if not isinstance(api, AbstractAPI):
@@ -143,7 +144,7 @@ class Song(object):
         self.loaded = True
         return fname
 
-    def to_json(self):
+    def to_json(self) -> typing.Dict[str, str]:
         return {
             "song_id": self.song_id,
             "api_name": self.api.get_name(),
@@ -156,22 +157,22 @@ class Song(object):
         }
 
     @staticmethod
-    def from_json(json, apis):
-        '''
+    def from_json(song_json: dict, apis: list):
+        """
         Create a song from json.
 
         Keyword arguments:
         json -- the json representation of a song
         apis -- a dict from api names to apis
-        '''
+        """
 
         try:
-            song_id = json['song_id']
+            song_id = song_json['song_id']
         except KeyError:
             raise ValueError("invalid json (missing song_id")
 
         try:
-            api_name = json['api_name']
+            api_name = song_json['api_name']
             api = apis[api_name]
         except KeyError:
             raise ValueError("invalid json (missing or invalid api_name)")
@@ -179,12 +180,12 @@ class Song(object):
         return Song(
             song_id=song_id,
             api=api,
-            title=json.get("title", None),
-            description=json.get("description", None),
-            albumArtUrl=json.get("albumArtUrl", None),
-            str_rep=json.get("str_rep", None),
-            duration=json.get("duration", None),
-            user=json.get("user", None)
+            title=song_json.get("title", None),
+            description=song_json.get("description", None),
+            albumArtUrl=song_json.get("albumArtUrl", None),
+            str_rep=song_json.get("str_rep", None),
+            duration=song_json.get("duration", None),
+            user=song_json.get("user", None)
         )
 
     def __repr__(self):
@@ -207,36 +208,36 @@ class Song(object):
 
 
 class AbstractAPI(object):
-    def get_name(self):
-        '''
+    def get_name(self) -> str:
+        """
         Return the unique name of this API.
         The name can't contain any whitespace. Use lower_snake_case.
-        '''
+        """
         raise NotImplementedError()
 
-    def get_pretty_name(self):
-        '''
+    def get_pretty_name(self) -> str:
+        """
         Return a pretty name of this API to show users.
         This name can be an arbitrary string.
-        '''
+        """
         raise NotImplementedError()
 
-    def lookup_song(self, song_id):
-        '''
+    def lookup_song(self, song_id: str) -> Song:
+        """
         Look up the info about a song based on the song_id.
         Return a Song object.
-        '''
+        """
         raise NotImplementedError()
 
-    def search_song(self, query, max_fetch=1000):
-        '''
+    def search_song(self, query: str, max_fetch: int = 1000) -> typing.Generator[Song, None, None]:
+        """
         Search for songs.
-        Return a list of Song objects.
+        Return a generator yielding Song objects.
         The max_fetch argument may or may not determine how many songs are fetched at once.
-        '''
+        """
         raise NotImplementedError()
 
-    def _download(self, song):
+    def _download(self, song: Song) -> str:
         """
         Download a song and return its filename.
         The filename ALWAYS starts with a 'native_' prefix.
@@ -250,52 +251,52 @@ class AbstractSongProvider(AbstractAPI):
     def __init__(self):
         super().__init__()
 
-    def get_song(self):
-        '''
+    def get_song(self) -> Song:
+        """
         Return the next song and remove it from suggestions.
-        '''
+        """
         raise NotImplementedError()
 
-    def add_played(self, song):
-        '''
+    def add_played(self, song: Song):
+        """
         Add a song to the list further suggestions are based on it.
-        '''
+        """
         raise NotImplementedError()
 
-    def get_playlist(self):
-        '''
+    def get_playlist(self) -> typing.List[Song]:
+        """
         Return the list suggestions are based on.
-        '''
+        """
         raise NotImplementedError()
 
-    def remove_from_playlist(self, song):
-        '''
+    def remove_from_playlist(self, song: Song):
+        """
         Remove a song from the list suggestions are based on.
-        '''
+        """
         raise NotImplementedError()
 
-    def get_suggestions(self, max_len):
-        '''
+    def get_suggestions(self, max_len: int) -> list:
+        """
         Return a list of suggested songs with the given maximum length.
-        '''
+        """
         raise NotImplementedError()
 
-    def remove_from_suggestions(self, song):
-        '''
+    def remove_from_suggestions(self, song: Song):
+        """
         Remove a song from the currently loaded suggestions.
         If the song is not in the suggestions, nothing happens.
-        '''
+        """
 
     def reload(self):
-        '''
+        """
         Reload suggestions. Do not drop the playlist.
-        '''
+        """
         raise NotImplementedError()
 
     def reset(self):
-        '''
-        Reset any state and clear the playlist. 
-        '''
+        """
+        Reset any state and clear the playlist.
+        """
         raise NotImplementedError()
 
 
@@ -317,7 +318,7 @@ class GMusicAPI(AbstractSongProvider):
         self._load_ids()
         self._remote_playlist_load()
 
-    def get_api(self):
+    def get_api(self) -> Mobileclient:
         return self._api
 
     def get_name(self):
@@ -990,7 +991,7 @@ class OfflineAPI(AbstractSongProvider):
         raise ValueError("Unknown playlist")
 
     def get_playlist(self):
-        if self._active_playlist:
+        if self._active_playlist: # TODO return songs
             return list(self._active_playlist.song_ids)
         else:
             return []
