@@ -981,6 +981,16 @@ class OfflineAPI(AbstractSongProvider):
         """
         return list(map(lambda playlist: (playlist.playlist_id, playlist.name), self._playlists))
 
+    def get_active_playlist(self):
+        """
+        Get the active playlist
+        :return: a (playlist_id, playlist_name) tuple or None
+        """
+        playlist = self._active_playlist
+        if playlist:
+            return playlist.playlist_id, playlist.name
+        return None
+
     def set_active_playlist(self, playlist_id):
         for playlist in self._playlists:
             if playlist.playlist_id == playlist_id:
@@ -991,8 +1001,8 @@ class OfflineAPI(AbstractSongProvider):
         raise ValueError("Unknown playlist")
 
     def get_playlist(self):
-        if self._active_playlist: # TODO return songs
-            return list(self._active_playlist.song_ids)
+        if self._active_playlist:
+            return list(map(self.lookup_song, self._active_playlist.song_ids))
         else:
             return []
 

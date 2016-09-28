@@ -184,6 +184,7 @@ def _add_client(client):
 available_permissions = [
     _Permission("mod", "all admin permissions, except exit, reset and granting permissions"),
     _Permission("queue_remove", "remove a song from the queue"),
+    _Permission("select_playlist", "select the active playlist for the offline API"),
     _Permission("exit", "shut the bot down"),
     _Permission("reset", "reset all bot settings, delete the remote playlist and shut the program down")
 ]
@@ -721,3 +722,66 @@ def reset_bot(user: hug.directives.user, response=None):
 
     async_handler.submit(_exit)
     return "OK"
+
+
+@hug.get(requires=authentication)
+def get_available_offline_playlists(user: hug.directives.user, response=None):
+    """
+    Get all available playlists of the offline API.
+    :return: a list of playlists of the form {'playlist_id': <id>, 'playlist_name': <name>}
+    """
+    if not has_permission(user, ["admin", "mod", "select_playlist"]):
+        response.status = falcon.HTTP_FORBIDDEN
+        return "Forbidden"
+    try:
+        api = music_api_names['offline_api']
+        playlists = api.get_available_playlists()
+        return list(map(lambda p: {'playlist_id': p[0], 'playlist_name': p[1]}, playlists))
+    except KeyError:
+        response.status = falcon.HTTP_400
+        return "Not in offline mode"
+
+
+@hug.get(requires=authentication)
+def get_active_playlist(user: hug.directives.user, response=None):
+    """
+    Get the active playlist of the offline API.
+    :return: the active playlist of the form {'playlist_id': <id>, 'playlist_name': <name>}
+    """
+    if not has_permission(user, ["admin", "mod", "select_playlist"]):
+        response.status = falcon.HTTP_FORBIDDEN
+        return "Forbidden"
+
+    try:
+        api = music_api_names['offline_api']
+        playlist_tuple = api.get_active_playlist()
+        if not playlist_tuple:
+            return None
+        return {'playlist_id': playlist_tuple[0], 'playlist_name': playlist_tuple[1]}
+    except KeyError:
+        response.status = falcon.HTTP_400
+        return "Not in offline mode"
+
+
+@hug.put(requires=authentication)
+def mark_active(playlist_id: str, user: hug.directives.user, response=None):
+    """
+    Mark a playlist as active in offline mode.
+    Needs admin, mod or select_playlist permission.
+    :param playlist_id: the playlist ID as returned by get_available_playlists
+    """
+    if not has_permission(user, ["admin", "mod", "select_playlist"]):
+        response.status = falcon.HTTP_FORBIDDEN
+        return "Forbidden"
+
+    try:
+        try:
+            api = music_api_names['offline_api']
+        except KeyError:
+            response.status = falcon.HTTP_400
+            return "Not in offline mode"
+        api.set_active_playlist(playlist_id)
+        return "OK"
+    except ValueError:
+        response.status = falcon.HTTP_UNPROCESSABLE_ENTITY
+        return "Unknown ID"
