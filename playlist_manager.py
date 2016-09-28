@@ -8,8 +8,30 @@ from gmusicapi import CallFailure
 from musicbot.music_apis import GMusicAPI, OfflineAPI
 
 
-def download_songs(song_ids):
-    songs = map(gmusic_api.lookup_song, song_ids)
+def download_songs(song_ids, include_uploaded):
+    own_songs = {}
+    if include_uploaded:
+        # This is a generator object loading 1000 songs at once
+        all_songs = api.get_all_songs(True)
+
+    def _lookup_song(song_id):
+        if not include_uploaded or song_id.startswith("T"):
+            return gmusic_api.lookup_song(song_id)
+        result = None
+        if song_id in own_songs:
+            return own_songs[song_id]
+        for thousand_songs in all_songs:
+            for song_json in thousand_songs:
+                if "storeId" not in song_json:
+                    song = gmusic_api._song_from_info(song_json)
+                    own_songs[song.song_id] = song
+                    if song.song_id == song_id:
+                        result = song
+            if result:
+                break
+        return result
+
+    songs = filter(None, map(_lookup_song, song_ids))
 
     def _load(song):
         print("Loading song", song)
@@ -28,15 +50,28 @@ def ask_for_action():
 
 def handle_add_playlist():
     share_token = input("Please enter a share token: ").strip()
-    try:
-        if not share_token:
-            print("Empty share token")
-            return
+    if not share_token:
+        print("Empty share token")
+        return
 
+    incluce_uploaded = input(
+        "Do you want to include your own (uploaded) songs (Y/N)? May take significantly longer. ").strip().lower()
+    incluce_uploaded = incluce_uploaded == "y"
+    try:
         if share_token.endswith("%3D%3D"):
             share_token = share_token[:-6] + "=="
 
-        playlist = api.get_shared_playlist_contents(share_token)
+        if incluce_uploaded:
+            playlists = list(filter(lambda p: p['shareToken'] == share_token, api.get_all_user_playlist_contents()))
+            if playlists:
+                playlist = playlists[0]['tracks']
+            else:
+                print("Invalid share token")
+                return
+
+
+        else:
+            playlist = api.get_shared_playlist_contents(share_token)
     except CallFailure as e:
         print("Invalid share token", e)
         return
@@ -53,11 +88,7 @@ def handle_add_playlist():
 
     def _get_song_id(song_json):
         try:
-            track = song_json['track']
-            if "storeId" in track:
-                return track['storeId']
-            else:
-                return track['id']
+            return song_json['trackId']
         except KeyError:
             return None
 
@@ -65,7 +96,7 @@ def handle_add_playlist():
 
     # Download songs
     print("Downloading songs in playlist", name)
-    download_songs(song_ids)
+    download_songs(song_ids, incluce_uploaded)
 
     print("Updating playlists.json")
     offline_api.remove_playlist(share_token)
