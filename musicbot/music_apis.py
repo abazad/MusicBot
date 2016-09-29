@@ -286,6 +286,7 @@ class AbstractSongProvider(AbstractAPI):
         Remove a song from the currently loaded suggestions.
         If the song is not in the suggestions, nothing happens.
         """
+        raise NotImplementedError()
 
     def reload(self):
         """
