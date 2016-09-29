@@ -974,6 +974,12 @@ class OfflineAPI(AbstractSongProvider):
         if self._active_playlist:
             self._active_playlist.remove(song)
 
+    def remove_from_suggestions(self, song: Song):
+        try:
+            self._next_songs.remove(song)
+        except ValueError:
+            pass
+
     def get_available_playlists(self):
         """
         Get a list of available playlists
