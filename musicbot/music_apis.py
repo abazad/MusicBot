@@ -487,6 +487,8 @@ class GMusicAPI(AbstractSongProvider):
 
     def _remote_playlist_delete(self):
         self._api.delete_playlist(self._playlist_id)
+        self._playlist_id = None
+        self._write_ids()
 
     def _remote_station_create(self):
         self._remote_playlist_create()
@@ -497,6 +499,8 @@ class GMusicAPI(AbstractSongProvider):
 
     def _remote_station_delete(self):
         self._api.delete_stations([self._station_id])
+        self._station_id = None
+        self._write_ids()
 
     def _load_ids(self):
         secrets = config.get_secrets()
