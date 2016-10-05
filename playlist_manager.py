@@ -1,6 +1,8 @@
 import difflib
+import json
 import os
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from gmusicapi import CallFailure
@@ -14,22 +16,27 @@ def download_songs(song_ids, include_uploaded):
         # This is a generator object loading 1000 songs at once
         all_songs = api.get_all_songs(True)
 
+    all_songs_lock = threading.Lock()
+
     def _lookup_song(song_id):
         if not include_uploaded or song_id.startswith("T"):
             return gmusic_api.lookup_song(song_id)
-        result = None
         if song_id in own_songs:
             return own_songs[song_id]
-        for thousand_songs in all_songs:
-            for song_json in thousand_songs:
-                if "storeId" not in song_json:
-                    song = gmusic_api._song_from_info(song_json)
-                    own_songs[song.song_id] = song
-                    if song.song_id == song_id:
-                        result = song
-            if result:
-                break
-        return result
+        with all_songs_lock:
+            if song_id in own_songs:
+                return own_songs[song_id]
+            result = None
+            for thousand_songs in all_songs:
+                for song_json in thousand_songs:
+                    if "storeId" not in song_json:
+                        song = gmusic_api._song_from_info(song_json)
+                        own_songs[song.song_id] = song
+                        if song.song_id == song_id:
+                            result = song
+                if result:
+                    break
+            return result
 
     songs = filter(None, map(_lookup_song, song_ids))
 
@@ -68,8 +75,6 @@ def handle_add_playlist():
             else:
                 print("Invalid share token")
                 return
-
-
         else:
             playlist = api.get_shared_playlist_contents(share_token)
     except CallFailure as e:
@@ -92,16 +97,14 @@ def handle_add_playlist():
         except KeyError:
             return None
 
-    song_ids = filter(None, map(_get_song_id, playlist))
+    song_ids = list(filter(None, map(_get_song_id, playlist)))
 
     # Download songs
     print("Downloading songs in playlist", name)
     download_songs(song_ids, incluce_uploaded)
 
-    print("Updating playlists.json")
-    offline_api.remove_playlist(share_token)
+    print("Updating playlists database")
     offline_api.add_playlist(share_token, name, song_ids)
-    offline_api.save_playlists()
     print("Done.")
 
 
@@ -156,7 +159,6 @@ def handle_remove_playlist():
 
     print("Removing playlist")
     offline_api.remove_playlist(share_token)
-    offline_api.save_playlists()
     print("Done.")
 
 

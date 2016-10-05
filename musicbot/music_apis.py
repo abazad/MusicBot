@@ -2,14 +2,17 @@ import json
 import logging
 import os
 import socket
+import sqlite3
 import threading
 import time
 import typing
 import urllib
 from datetime import datetime
 from getpass import getpass
+from itertools import cycle
+from itertools import islice
 from json import JSONDecodeError
-from os.path import isfile
+from os.path import isfile, join
 from random import choice
 
 import pylru
@@ -28,6 +31,20 @@ _download_semaphore = threading.Semaphore(_max_downloads)
 _conversion_semaphore = threading.Semaphore(_max_conversions)
 _loading_ids = {}
 _loading_ids_lock = threading.Lock()
+
+
+def _roundrobin(*iterables):
+    "roundrobin('ABC', 'D', 'EF') --> A D E B F C"
+    # Recipe credited to George Sakkis
+    pending = len(iterables)
+    nexts = cycle(iter(it).__next__ for it in iterables)
+    while pending:
+        try:
+            for next in nexts:
+                yield next()
+        except StopIteration:
+            pending -= 1
+            nexts = cycle(islice(nexts, pending))
 
 
 class Song(object):
@@ -833,33 +850,27 @@ class SoundCloudAPI(AbstractAPI):
 class OfflineAPI(AbstractSongProvider):
     def __init__(self):
         super().__init__()
-
-        songs = []
-        song_ids = {}
-
-        if os.path.isdir(_songs_path):
-            join = os.path.join
-            for song_file_name in os.listdir(_songs_path):
-                song_path = join(_songs_path, song_file_name)
-                if not isfile(song_path) \
-                        or not song_file_name.endswith(".mp3") \
-                        or song_file_name.endswith(".tmp") \
-                        or song_file_name.startswith("native_"):
-                    continue
-                song_id = ".".join(song_file_name.split(".")[:-1])
-                song = self._try_load_song(song_id, song_path)
-                if song:
-                    song_ids[song.song_id] = song
-                    songs.append(song)
-
-        self._songs = songs
-        self._song_ids = song_ids
+        song_id = "Tj6fhurtstzgdpvfm4xv6i5cei4"
+        if not isfile(self._get_song_path(song_id)):
+            raise ValueError("Fallback song unavailable.")
+        self._fallback_playlist = OfflineAPI._Playlist("fallbackID", "fallbackPlaylist", [song_id])
         self._active_playlist = None
-        self._playlists = self._load_playlists()
+        self._db_path = os.path.join(_songs_path, "playlists.db")
+        self._create_db()
+        self._load_playlists()  # Legacy, remove in December 2016
         self._next_songs = []
-        self._last_played = []
+        self._last_played_ids = []
 
-    def _try_load_song(self, song_id, song_path):
+    def _try_load_song(self, song_id, song_path) -> Song:
+        """
+        Try to retrieve a song from the specified path.
+        The song's info is read from its ID3 tags.
+        :param song_id: the song's ID
+        :param song_path: the path to the song's mp3
+        :return: a song with loaded set to True, or None
+        """
+        if not isfile(song_path):
+            return None
         audio = EasyMP3(song_path)
         id3 = audio.tags
         try:
@@ -875,43 +886,111 @@ class OfflineAPI(AbstractSongProvider):
         logging.getLogger("musicbot").debug("Loaded offline song: %s", song)
         return song
 
-    def _load_playlists(self):
+    def _create_db(self):
+        db = sqlite3.connect(self._db_path)
+        try:
+            with db:
+                db.execute(
+                    "CREATE TABLE IF NOT EXISTS songs(songId TEXT PRIMARY KEY, title TEXT, description TEXT, stringRep TEXT, albumArtUrl TEXT, path TEXT UNIQUE NOT NULL)")
+                db.execute(
+                    "CREATE TABLE IF NOT EXISTS playlists(playlistId TEXT UNIQUE NOT NULL, name TEXT NOT NULL)")
+                db.execute(
+                    "CREATE TABLE IF NOT EXISTS playlistSongs(playlistId INTEGER NOT NULL REFERENCES playlists(playlistId), songId TEXT NOT NULL REFERENCES songs(songId), PRIMARY KEY(playlistId, songId))")
+        finally:
+            db.close()
+
+    def _load_playlists_json(self):
+        """
+        Deprecated, will be removed in December 2016.
+        Removes the playlists.json after execution.
+        :return: a set of playlists
+        """
         playlists_path = os.path.join(_songs_path, "playlists.json")
         if not isfile(playlists_path):
             return set()
 
         try:
-            with open(playlists_path, 'r') as playlists_file:
-                playlists_json = json.loads(playlists_file.read())
-                playlists = playlists_json['playlists']
-        except (IOError, JSONDecodeError, KeyError):
-            return set()
-
-        if "active_id" in playlists_json:
-            active_id = playlists_json['active_id']
-        else:
-            active_id = None
-
-        result = set()
-        for playlist_json in playlists:
             try:
-                playlist = OfflineAPI._Playlist.from_json(self._song_ids, playlist_json)
-                if playlist.playlist_id == active_id:
-                    self._active_playlist = playlist
-            except ValueError:
-                logging.getLogger("musicbot").debug("Invalid playlist %s", json.dumps(playlist_json))
-                continue
-            result.add(playlist)
-        return result
+                with open(playlists_path, 'r') as playlists_file:
+                    playlists_json = json.loads(playlists_file.read())
+                    playlists = playlists_json['playlists']
+            except (IOError, JSONDecodeError, KeyError):
+                return set()
 
-    def save_playlists(self):
-        playlists_path = os.path.join(_songs_path, "playlists.json")
-        playlists_json = {}
-        if self._active_playlist:
-            playlists_json['active_id'] = self._active_playlist.playlist_id
-        playlists_json['playlists'] = list(map(OfflineAPI._Playlist.to_json, self._playlists))
-        with open(playlists_path, 'w') as playlists_file:
-            playlists_file.write(json.dumps(playlists_json))
+            if "active_id" in playlists_json:
+                active_id = playlists_json['active_id']
+            else:
+                active_id = None
+
+            _get_song_path = self._get_song_path
+
+            def song_exists(song_id):
+                return isfile(_get_song_path(song_id))
+
+            result = set()
+            for playlist_json in playlists:
+                try:
+                    playlist = OfflineAPI._Playlist.from_json(playlist_json, song_exists)
+                    if playlist.playlist_id == active_id:
+                        self._active_playlist = playlist
+                except ValueError:
+                    logging.getLogger("musicbot").debug("Invalid playlist %s", json.dumps(playlist_json))
+                    continue
+                result.add(playlist)
+            return result
+        finally:
+            os.remove(playlists_path)
+
+    @staticmethod
+    def _get_song_path(song_id):
+        return join(_songs_path, song_id + ".mp3")
+
+    def _get_song_tuple(self, song: Song) -> typing.Tuple:
+        if not song:
+            return None
+        song_path = self._get_song_path(song.song_id)
+        if not isfile(song_path):
+            return None
+        return song.song_id, song.title, song.description, str(song), song.albumArtUrl, song_path
+
+    def _get_song_tuple_generator(self, song_ids):
+        _get_song_path = self._get_song_path
+        _try_load_song = self._try_load_song
+        _get_song_tuple = self._get_song_tuple
+        for song_id in song_ids:
+            path = _get_song_path(song_id)
+            song = _try_load_song(song_id, path)
+            yield _get_song_tuple(song)
+
+    def _write_playlists_to_db(self, playlists):
+        """
+        Legacy method. Will be removed in December 2016.
+        Write all playlists to the database.
+        This is only useful after loading the playlists from a json file.
+        :param playlists: a set of playlists
+        """
+        _get_song_tuple_generator = self._get_song_tuple_generator
+        db = sqlite3.connect(self._db_path)
+        try:
+            with db:
+                for playlist in playlists:
+                    playlist_id = playlist.playlist_id
+                    db.execute("INSERT INTO playlists(textId, name) VALUES(?, ?)", (playlist_id, playlist.name))
+                    db.executemany(
+                        "INSERT INTO songs(songId, title, description, stringRep, albumArtUrl, path) VALUES(?, ?, ?, ?, ?, ?)",
+                        filter(None, _get_song_tuple_generator(playlist.song_ids)))
+                    db.executemany("INSERT OR IGNORE INTO playlistSongs(playlistId, songId) VALUES(?, ?)",
+                                   map(lambda song_id: (playlist_id, song_id), playlist.song_ids))
+        finally:
+            db.close()
+
+    def _load_playlists(self):
+        """
+        Legacy method. Will be removed in December 2016.
+        """
+        if not isfile(self._db_path):
+            playlists = self._load_playlists_json()
+            self._write_playlists_to_db(playlists)
 
     def get_name(self):
         return "offline_api"
@@ -920,11 +999,22 @@ class OfflineAPI(AbstractSongProvider):
         return "Offline"
 
     def add_played(self, song: Song):
-        self._last_played.append(song.song_id)
-        self._last_played = self._last_played[-50:]
+        self._last_played_ids.append(song.song_id)
+        self._last_played_ids = self._last_played_ids[-50:]
 
     def reload(self):
         pass
+
+    def _get_active_playlist(self):
+        """
+        Get the active playlist.
+        If there is none active, return a one-song-fallback-playlist.
+        :return:
+        """
+        active_playlist = self._active_playlist
+        if active_playlist:
+            return active_playlist
+        return self._fallback_playlist
 
     def _download(self, song: Song):
         if song.api != self:
@@ -939,11 +1029,8 @@ class OfflineAPI(AbstractSongProvider):
         if len(self._next_songs) >= max_load:
             return
 
-        playlist = self._active_playlist
-        last_played = self._last_played
-        if not playlist:
-            self._next_songs.extend([choice(self._songs) for i in range(0, max_load)])
-            return
+        playlist = self._get_active_playlist()
+        last_played = self._last_played_ids
 
         conflicts = 0
         extender = []
@@ -953,7 +1040,7 @@ class OfflineAPI(AbstractSongProvider):
                 conflicts += 1
                 continue
             extender.append(store_id)
-        self._next_songs.extend(extender)
+        self._next_songs.extend(map(self.lookup_song, extender))
 
     def get_song(self):
         self._load_next_songs(1)
@@ -964,20 +1051,63 @@ class OfflineAPI(AbstractSongProvider):
         return self._next_songs[:max_len]
 
     def remove_playlist(self, playlist_id):
-        playlist = OfflineAPI._Playlist(playlist_id, "", set())
-        if playlist in self._playlists:
-            self._playlists.remove(playlist)
+        db = sqlite3.connect(self._db_path)
+        try:
+            with db:
+                db.execute("DELETE FROM playlistSongs WHERE playlistId=?", [playlist_id])
+                db.execute("DELETE FROM playlists WHERE playlistId=?", [playlist_id])
+        finally:
+            db.close()
+        active = self._active_playlist
+        if active and active.playlist_id == playlist_id:
+            self._active_playlist = None
 
     def add_playlist(self, playlist_id, name, song_ids):
-        self._playlists.add(OfflineAPI._Playlist(playlist_id, name, song_ids))
+        db = sqlite3.connect(self._db_path)
+        try:
+            with db:
+                cursor = db.cursor()
+                cursor.execute("INSERT OR IGNORE INTO playlists(playlistId, name) VALUES(?, ?)", [playlist_id, name])
+                cursor.executemany(
+                    "INSERT OR IGNORE INTO songs(songId, title, description, stringRep, albumArtUrl, path) VALUES(?, ?, ?, ?, ?, ?)",
+                    filter(None, self._get_song_tuple_generator(song_ids)))
+                cursor.executemany("INSERT OR IGNORE INTO playlistSongs(playlistId, songId) VALUES(?, ?)",
+                                   map(lambda song_id: (playlist_id, song_id), song_ids))
+        finally:
+            db.close()
 
     def add_to_playlist(self, song):
-        if self._active_playlist:
-            self._active_playlist.add(song)
+        active_playlist = self._active_playlist
+        if active_playlist:
+            active_playlist.add(song)
+        else:
+            raise ValueError("No active playlist")
+
+        db = sqlite3.connect(self._db_path)
+        try:
+            with db:
+                db.execute(
+                    "INSERT OR IGNORE INTO songs(songId, title, description, stringRep, albumArtUrl, path) VALUES(?, ?, ?, ?, ?, ?)",
+                    self._get_song_tuple(song))
+                db.execute("INSERT OR IGNORE INTO playlistSongs(playlistId, songId) VALUES(?, ?)",
+                           (active_playlist.playlist_id, song.song_id))
+        finally:
+            db.close()
 
     def remove_from_playlist(self, song):
-        if self._active_playlist:
-            self._active_playlist.remove(song)
+        active_playlist = self._active_playlist
+        if active_playlist:
+            active_playlist.remove(song)
+        else:
+            raise ValueError("No active playlist")
+
+        db = sqlite3.connect(self._db_path)
+        try:
+            with db:
+                db.execute("DELETE FROM playlistSongs WHERE playlistId=? AND songId=?",
+                           (active_playlist.playlist_id, song.song_id))
+        finally:
+            db.close()
 
     def remove_from_suggestions(self, song: Song):
         try:
@@ -990,7 +1120,11 @@ class OfflineAPI(AbstractSongProvider):
         Get a list of available playlists
         :return: a list of (playlist_id, playlist_name) tuples
         """
-        return list(map(lambda playlist: (playlist.playlist_id, playlist.name), self._playlists))
+        db = sqlite3.connect(self._db_path)
+        try:
+            return db.execute("SELECT playlistId, name FROM playlists").fetchall()
+        finally:
+            db.close()
 
     def get_active_playlist(self):
         """
@@ -1002,79 +1136,98 @@ class OfflineAPI(AbstractSongProvider):
             return playlist.playlist_id, playlist.name
         return None
 
+    def _get_tuple_generator(self, cursor: sqlite3.Cursor, fetch_size=100):
+        while True:
+            tuples = cursor.fetchmany(fetch_size)
+            if not tuples:
+                break
+            yield from tuples
+
     def set_active_playlist(self, playlist_id):
-        for playlist in self._playlists:
-            if playlist.playlist_id == playlist_id:
-                self._active_playlist = playlist
-                self._next_songs = []
-                self._last_played = []
-                return
-        raise ValueError("Unknown playlist")
+        def _song_id_from_tuple(song_tuple):
+            return song_tuple[0]
+
+        db = sqlite3.connect(self._db_path)
+        try:
+            name = db.execute("SELECT name FROM playlists WHERE playlistId=?", [playlist_id]).fetchone()[0]
+            cursor = db.execute(
+                "SELECT songId FROM (SELECT * FROM playlists WHERE playlistId=?) NATURAL JOIN playlistSongs")
+            song_ids = list(map(_song_id_from_tuple, self._get_tuple_generator(cursor)))
+            playlist = OfflineAPI._Playlist(playlist_id, name, song_ids)
+            self._active_playlist = playlist
+            self._next_songs = []
+            self._last_played_ids = []
+        except IndexError:
+            raise ValueError("Unknown playlist")
+        finally:
+            db.close()
 
     def get_playlist(self):
-        if self._active_playlist:
-            return list(map(self.lookup_song, self._active_playlist.song_ids))
+        active_playlist = self._active_playlist
+        if active_playlist:
+            return list(map(self.lookup_song, active_playlist.song_ids))
         else:
             return []
 
     def search_song(self, query, max_fetch=100):
-        songs = self._songs
         query_parts = query.strip().lower().split(" ")
+        sqlite_query_args = _roundrobin(query_parts)
+        sqlite_query_parts = map(lambda part: "title LIKE %?% OR description LIKE %?%", query_parts)
+        sqlite_query = "SELECT songId, title, description, stringRep, albumArtUrl FROM songs WHERE " + " OR ".join(
+            sqlite_query_parts)
 
-        def _match(song):
-            title = song.title
-            description = song.description
-            song_str = title
-            if title:
-                song_str += " " + description
-            else:
-                song_str = description
-            song_str = song_str.lower()
-            for part in query_parts:
-                if part in song_str:
-                    return True
+        def song_from_tuple(song_tuple):
+            song = Song(song_tuple[0], self, song_tuple[1], song_tuple[2], song_tuple[4], song_tuple[3])
+            song.loaded = True
+            return song
 
-        return list(filter(_match, songs))
-
-    def lookup_song(self, song_id):
+        db = sqlite3.connect(self._db_path)
         try:
-            return self._song_ids[song_id]
-        except KeyError:
-            return None
+            cursor = db.execute(sqlite_query, sqlite_query_args)
+            for song_tuple in self._get_tuple_generator(cursor, max_fetch):
+                yield song_from_tuple(song_tuple)
+        finally:
+            db.close()
+
+    @pylru.lrudecorator(1024)
+    def lookup_song(self, song_id):
+        return self._try_load_song(song_id, self._get_song_path(song_id))
 
     def reset(self):
         self._active_playlist = None
-        self._last_played = []
-        os.remove(os.path.join(_songs_path, "playlists.json"))
+        self._last_played_ids = []
+        os.remove(self._db_path)
 
     class _Playlist(object):
-        def __init__(self, playlist_id, name, song_ids):
+        def __init__(self, playlist_id, name, song_ids: typing.List[str]):
             self.playlist_id = playlist_id
             self.name = name
-            self.song_ids = set(song_ids)
+            self.song_ids = song_ids
 
         def add(self, song):
-            self.song_ids.add(song)
+            song_ids = self.song_ids
+            if song not in song_ids:
+                song_ids.append(song)
 
         def remove(self, song):
             try:
                 self.song_ids.remove(song)
-            except KeyError:
+            except ValueError:
                 pass
 
         def to_json(self):
             return {
                 "playlist_id": self.playlist_id,
                 "name": self.name,
-                "song_ids": list(self.song_ids)
+                "song_ids": self.song_ids
             }
 
         @staticmethod
-        def from_json(song_ids, playlist_json):
+        def from_json(playlist_json: dict, song_exists: typing.Callable[[str], bool]):
             try:
                 playlist_id = playlist_json['playlist_id']
                 name = playlist_json['name']
-                song_ids = set(filter(lambda song_id: song_id in song_ids, playlist_json['song_ids']))
+                song_ids = list(filter(song_exists, playlist_json['song_ids']))
             except KeyError:
                 raise ValueError()
             return OfflineAPI._Playlist(playlist_id, name, song_ids)
