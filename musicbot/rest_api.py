@@ -78,6 +78,9 @@ class _Permission(object):
             return ValueError("Missing key in json")
         return _Permission(name, description)
 
+    def __str__(self):
+        return self.name
+
 
 class _SecretClient(object):
     def __init__(self, name, pw_hash, permissions):
@@ -170,11 +173,11 @@ def _add_client(client):
             raise ValueError("client already in clients")
         db = _get_db_conn()
         try:
-            db.execute("INSERT INTO clients(username, pw_hash, permissions) VALUES(?, ?, ?)",
-                       (client.name,
-                        client.pw_hash,
-                        ",".join(client.permissions)))
-            db.commit()
+            with db:
+                db.execute("INSERT INTO clients(username, pw_hash, permissions) VALUES(?, ?, ?)",
+                           (client.name,
+                            client.pw_hash,
+                            ",".join(client.permissions)))
         finally:
             db.close()
 
@@ -315,8 +318,8 @@ def change_password(old_password, new_password, user: hug.directives.user, respo
 
     db = _get_db_conn()
     try:
-        db.execute("UPDATE clients SET pw_hash=? WHERE username=?", pw_hash, user['name'])
-        db.commit()
+        with db:
+            db.execute("UPDATE clients SET pw_hash=? WHERE username=?", pw_hash, user['name'])
         return "OK"
     finally:
         db.close()
@@ -564,8 +567,8 @@ def claim_admin(user: hug.directives.user, response=None):
         permissions = list(set(permissions))
         db = _get_db_conn()
         try:
-            db.execute("UPDATE clients SET permissions=? WHERE username=?", (",".join(permissions), username))
-            db.commit()
+            with db:
+                db.execute("UPDATE clients SET permissions=? WHERE username=?", (",".join(permissions), username))
         finally:
             db.close()
     return _create_user_token(username, permissions)
@@ -584,7 +587,7 @@ def get_available_permissions(user: hug.directives.user = None, response=None):
         logger.debug("%s tried to get available permissions but is not admin.", user['name'])
         response.status = falcon.HTTP_FORBIDDEN
         return None
-    return available_permissions
+    return list(map(_Permission.to_json, available_permissions))
 
 
 @hug.local()
@@ -617,15 +620,20 @@ def get_users(user: hug.directives.user = None, response=None):
 
 @asyncio.coroutine
 @hug.put(requires=authentication)
-def grant_permission(target_username, permission: hug.types.json, user: hug.directives.user = None, response=None):
+def grant_permission(target_username, body, user: hug.directives.user = None, response=None):
     """
     Grant a permission to a user
     Note that the new permissions only apply after the user logged out and in again.
     Needs admin permission.
     :param target_username: the username of the user the permission should be granted
-    :param permission: the permission as returned by get_permissions
+    :param body: the permission as returned by get_permissions
     :return: 'OK', error message or None
     """
+    try:
+        permission = _Permission.from_json(body)
+    except ValueError:
+        response.status = falcon.HTTP_UNPROCESSABLE_ENTITY
+        return "invalid JSON"
     if not is_admin(user):
         logger.debug("%s tried to grant a permission %s to %s but is not admin.", user['name'], permission,
                      target_username)
@@ -638,11 +646,12 @@ def grant_permission(target_username, permission: hug.types.json, user: hug.dire
         response.status = falcon.HTTP_400
         return "unknown target user"
     permissions = client.permissions
-    permissions.append(permission)
+    permissions.append(permission.name)
     permissions = list(set(permissions))
     db = _get_db_conn()
     try:
-        db.execute("UPDATE clients SET permissions=? WHERE username=?", [",".join(permissions), target_username])
+        with db:
+            db.execute("UPDATE clients SET permissions=? WHERE username=?", [",".join(permissions), target_username])
     finally:
         db.close()
     return "OK"
@@ -650,15 +659,20 @@ def grant_permission(target_username, permission: hug.types.json, user: hug.dire
 
 @asyncio.coroutine
 @hug.put(requires=authentication)
-def revoke_permission(target_username, permission: hug.types.json, user: hug.directives.user = None, response=None):
+def revoke_permission(target_username, body, user: hug.directives.user = None, response=None):
     """
     Revokes a granted permission.
     Note that the new permissions only apply after the user logged out and in again.
     Needs admin permission.
     :param target_username: the username of the user whos permission should be revoked
-    :param permission: the permission as returned by get_permissions
+    :param body: the permission as returned by get_permissions
     :return: 'OK' or error_message or None
     """
+    try:
+        permission = _Permission.from_json(body)
+    except ValueError:
+        response.status = falcon.HTTP_UNPROCESSABLE_ENTITY
+        return "invalid JSON"
     if not is_admin(user):
         logger.debug("%s tried to revoke a permission %s from %s but is not admin.", user['name'], permission,
                      target_username)
@@ -672,12 +686,13 @@ def revoke_permission(target_username, permission: hug.types.json, user: hug.dir
         return "unknown target user"
     permissions = client.permissions
     try:
-        permissions.remove(permission)
+        permissions.remove(permission.name)
     except ValueError:
         pass
     db = _get_db_conn()
     try:
-        db.execute("UPDATE clients SET permissions=? WHERE username=?", [",".join(permissions), target_username])
+        with db:
+            db.execute("UPDATE clients SET permissions=? WHERE username=?", [",".join(permissions), target_username])
     finally:
         db.close()
     return "OK"
