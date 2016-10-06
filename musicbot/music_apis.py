@@ -1151,7 +1151,7 @@ class OfflineAPI(AbstractSongProvider):
         try:
             name = db.execute("SELECT name FROM playlists WHERE playlistId=?", [playlist_id]).fetchone()[0]
             cursor = db.execute(
-                "SELECT songId FROM (SELECT * FROM playlists WHERE playlistId=?) NATURAL JOIN playlistSongs")
+                "SELECT songId FROM (SELECT * FROM playlists WHERE playlistId=?) NATURAL JOIN playlistSongs", [playlist_id])
             song_ids = list(map(_song_id_from_tuple, self._get_tuple_generator(cursor)))
             playlist = OfflineAPI._Playlist(playlist_id, name, song_ids)
             self._active_playlist = playlist
