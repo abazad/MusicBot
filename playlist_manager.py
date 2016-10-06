@@ -29,7 +29,7 @@ def download_songs(song_ids, include_uploaded):
             result = None
             for thousand_songs in all_songs:
                 for song_json in thousand_songs:
-                    if "storeId" not in song_json:
+                    if "id" in song_json:
                         song = gmusic_api._song_from_info(song_json)
                         own_songs[song.song_id] = song
                         if song.song_id == song_id:

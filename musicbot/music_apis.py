@@ -541,10 +541,10 @@ class GMusicAPI(AbstractSongProvider):
         return name.format(hostname, timestamp)
 
     def _song_from_info(self, info):
-        if "storeId" in info:
-            song_id = info['storeId']
-        else:
+        if "id" in info:
             song_id = info['id']
+        else:
+            song_id = info['storeId']
         songs = self._songs
         if song_id in songs:
             return songs[song_id]
