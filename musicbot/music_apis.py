@@ -1171,8 +1171,9 @@ class OfflineAPI(AbstractSongProvider):
 
     def search_song(self, query, max_fetch=100):
         query_parts = query.strip().lower().split(" ")
-        sqlite_query_args = _roundrobin(query_parts)
-        sqlite_query_parts = map(lambda part: "title LIKE %?% OR description LIKE %?%", query_parts)
+        sqlite_query_args = list(_roundrobin(query_parts, query_parts))
+        sqlite_query_parts = map(lambda part: "title LIKE ('%' || ? || '%') OR description LIKE ('%' || ? || '%')",
+                                 query_parts)
         sqlite_query = "SELECT songId, title, description, stringRep, albumArtUrl FROM songs WHERE " + " OR ".join(
             sqlite_query_parts)
 
