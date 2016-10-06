@@ -10,7 +10,6 @@ import falcon
 import hug
 import jwt
 from passlib.hash import bcrypt_sha256
-from pylru import lrudecorator
 
 from musicbot import async_handler
 from musicbot import config
@@ -150,7 +149,6 @@ def _get_db_conn():
     return sqlite3.connect("config/clients.db")
 
 
-@lrudecorator(256)
 def _get_client(username):
     db = _get_db_conn()
     try:
