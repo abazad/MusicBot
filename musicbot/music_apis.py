@@ -774,18 +774,23 @@ class SoundCloudAPI(AbstractAPI):
             return songs[song_id]
         else:
             info = self._client.get("/tracks/{}".format(song_id))
-            return self._song_from_info(info)
+            song = self._song_from_info(info)
+            if not song:
+                raise ValueError("Song is not streamable or downloadable")
+            return song
 
     def search_song(self, query, max_fetch=200):
         if not query:
             raise ValueError("query is None")
-        act_max_fetch = min(50, max_fetch)
-        resource = self._client.get("tracks/", q=query, limit=act_max_fetch, linked_partitioning=1)
+        act_max_fetch = max(0, min(50, max_fetch))
+        resource = self._client.get("/tracks", q=query, limit=act_max_fetch, linked_partitioning=1)
         _info_to_song = self._song_from_info
         count = 0
         while count < max_fetch:
             for info in resource.collection:
                 song = _info_to_song(info)
+                if not song:
+                    continue
                 count += 1
                 yield song
 
@@ -806,7 +811,16 @@ class SoundCloudAPI(AbstractAPI):
             return native_fname
         native_fname_tmp = native_fname + ".tmp"
         info = self._client.get("/tracks/{}".format(song_id))
-        stream_url = info.stream_url
+        if info.streamable:
+            stream_url = info.stream_url
+        elif info.downloadable:
+            stream_url = info.download_url
+            native_fname = os.path.join(_songs_path, ".".join(["native_" + song_id, info.original_format]))
+            if isfile(native_fname):
+                return native_fname
+            native_fname_tmp = native_fname + ".tmp"
+        else:
+            raise ValueError("Tried to download song %s that is neither downloadable nor streamable", song)
         url = self._client.get(stream_url, allow_redirects=False).location
 
         request = urllib.request.Request(url)
@@ -817,11 +831,18 @@ class SoundCloudAPI(AbstractAPI):
         os.rename(native_fname_tmp, native_fname)
         return native_fname
 
-    def _song_from_info(self, info):
+    def _song_from_info(self, info) -> Song:
+        """
+        Create a song object from the json dict returned by the HTTP API.
+        :param info: the json dict
+        :return: a Song object, or None
+        """
         song_id = str(info.id)
         songs = self._songs
         if song_id in songs:
             return songs[song_id]
+        if not info.streamable and not info.downloadable:
+            return None
         artist = info.user['username']
         title = info.title
         url = info.artwork_url
@@ -1151,7 +1172,8 @@ class OfflineAPI(AbstractSongProvider):
         try:
             name = db.execute("SELECT name FROM playlists WHERE playlistId=?", [playlist_id]).fetchone()[0]
             cursor = db.execute(
-                "SELECT songId FROM (SELECT * FROM playlists WHERE playlistId=?) NATURAL JOIN playlistSongs", [playlist_id])
+                "SELECT songId FROM (SELECT * FROM playlists WHERE playlistId=?) NATURAL JOIN playlistSongs",
+                [playlist_id])
             song_ids = list(map(_song_id_from_tuple, self._get_tuple_generator(cursor)))
             playlist = OfflineAPI._Playlist(playlist_id, name, song_ids)
             self._active_playlist = playlist
