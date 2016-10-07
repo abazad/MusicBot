@@ -1063,7 +1063,7 @@ class OfflineAPI(AbstractSongProvider):
 
         playlist = self._get_active_playlist()
 
-        if len(self._next_songs) >= 1 and playlist.playlist_id == "fallbackID":
+        if self._next_songs and playlist.playlist_id == "fallbackID":
             return
 
         last_played = self._last_played_ids
