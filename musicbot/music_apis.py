@@ -454,7 +454,14 @@ class GMusicAPI(AbstractSongProvider):
             return result
 
         for track in tracks:
-            result.add(self._song_from_info(track['track']))
+            if "track" in track:
+                result.add(self._song_from_info(track['track']))
+            else:
+                # We don't actually care for the song info, so we use lookup_song which will return a song without info.
+                # This is still problematic for features like (telegram) /stationremove, because all songs will show up as 'Unknown'.
+                # However, looking up the song info for every song from get_all_songs would be way too expensive.
+                # TODO consider looking up from ID3-Tag if file exists
+                result.add(self.lookup_song(track['trackId']))
 
         self._playlist = result
 
