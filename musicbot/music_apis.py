@@ -893,8 +893,9 @@ class OfflineAPI(AbstractSongProvider):
         self._next_songs = []
         self._last_played_ids = []
 
-    def _try_load_song(self, song_id, song_path) -> Song:
+    def _try_load_song_legacy(self, song_id, song_path) -> Song:
         """
+        This is a legacy method. It will be removed in December 2016.
         Try to retrieve a song from the specified path.
         The song's info is read from its ID3 tags.
         :param song_id: the song's ID
@@ -928,6 +929,16 @@ class OfflineAPI(AbstractSongProvider):
                     "CREATE TABLE IF NOT EXISTS playlists(playlistId TEXT UNIQUE NOT NULL, name TEXT NOT NULL)")
                 db.execute(
                     "CREATE TABLE IF NOT EXISTS playlistSongs(playlistId INTEGER NOT NULL REFERENCES playlists(playlistId), songId TEXT NOT NULL REFERENCES songs(songId), PRIMARY KEY(playlistId, songId))")
+                db.execute(
+                    "INSERT OR IGNORE INTO songs(songId, title, description, stringRep, albumArtUrl, path) VALUES(?, ?, ?, ?, ?, ?)",
+                    [
+                        "Tj6fhurtstzgdpvfm4xv6i5cei4",
+                        "Biste braun kriegste Fraun",
+                        "Mickie Krause",
+                        "Mickie Krause - Biste braun kriegste Fraun",
+                        "http://lh3.googleusercontent.com/-ErPXoaDD1a4Y5JzOGwZK0Q3ZvFhziKoV0HJCgrIFTen2NYU93WtF0R_3ESFb_MvhHxOfPyA-g",
+                        join(_songs_path, "Tj6fhurtstzgdpvfm4xv6i5cei4.mp3")
+                    ])
         finally:
             db.close()
 
@@ -987,7 +998,7 @@ class OfflineAPI(AbstractSongProvider):
 
     def _get_song_tuple_generator(self, song_ids):
         _get_song_path = self._get_song_path
-        _try_load_song = self._try_load_song
+        _try_load_song = self._try_load_song_legacy
         _get_song_tuple = self._get_song_tuple
         for song_id in song_ids:
             path = _get_song_path(song_id)
@@ -1051,7 +1062,8 @@ class OfflineAPI(AbstractSongProvider):
     def _download(self, song: Song):
         if song.api != self:
             raise ValueError("Tried to download song %s with wrong API %s", song, self.get_name())
-        return song.song_id + ".mp3"
+        # songs created by this API should not use the default load method
+        raise NotImplementedError("Somehow OfflineAPI._download was called")
 
     def _load_next_songs(self, max_load=20):
         """
@@ -1063,7 +1075,9 @@ class OfflineAPI(AbstractSongProvider):
 
         playlist = self._get_active_playlist()
 
-        if self._next_songs and playlist.playlist_id == "fallbackID":
+        if playlist.playlist_id == "fallbackID":
+            if not self._next_songs:
+                self._next_songs.append(self.lookup_song(playlist.song_ids[0]))
             return
 
         last_played = self._last_played_ids
@@ -1211,11 +1225,12 @@ class OfflineAPI(AbstractSongProvider):
         sqlite_query_args = list(_roundrobin(query_parts, query_parts))
         sqlite_query_parts = map(lambda part: "title LIKE ('%' || ? || '%') OR description LIKE ('%' || ? || '%')",
                                  query_parts)
-        sqlite_query = "SELECT songId, title, description, stringRep, albumArtUrl FROM songs WHERE " + " OR ".join(
+        sqlite_query = "SELECT songId, title, description, stringRep, albumArtUrl, path FROM songs WHERE " + " OR ".join(
             sqlite_query_parts)
 
         def song_from_tuple(song_tuple):
             song = Song(song_tuple[0], self, song_tuple[1], song_tuple[2], song_tuple[4], song_tuple[3])
+            song.load = lambda: song_tuple[5]
             song.loaded = True
             return song
 
@@ -1229,7 +1244,22 @@ class OfflineAPI(AbstractSongProvider):
 
     @pylru.lrudecorator(1024)
     def lookup_song(self, song_id):
-        return self._try_load_song(song_id, self._get_song_path(song_id))
+        db = sqlite3.connect(self._db_path)
+
+        try:
+            with db:
+                cursor = db.execute("SELECT title, description, stringRep, albumArtUrl, path FROM songs WHERE songId=?",
+                                    [song_id])
+                song_tuple = cursor.fetchone()
+                if not song_tuple:
+                    return None
+                title, description, stringRep, albumArtUrl, path = song_tuple
+                song = Song(song_id, self, title, description, albumArtUrl, stringRep)
+                song.load = lambda: path
+                song.loaded = True
+                return song
+        finally:
+            db.close()
 
     def reset(self):
         self._active_playlist = None
