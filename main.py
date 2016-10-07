@@ -68,12 +68,16 @@ if config.get_auto_updates_enabled():
 secrets = config.get_secrets()
 
 offline_mode = "--offline" in sys.argv
+enable_offline = "--add-offline" in sys.argv
 
 music_api_list = []
 
 # Load music APIs
 if offline_mode:
     logger.info("Starting in offline mode. GMusic, YouTube and Soundcloud are unavailable.")
+elif enable_offline:
+    logger.info("Loading with additional offline API in online mode")
+if offline_mode or enable_offline:
     try:
         offline_api = music_apis.OfflineAPI()
         music_api_list.append(offline_api)
@@ -82,6 +86,7 @@ if offline_mode:
         async_handler.shutdown()
         sys.exit(100)
 
+if offline_mode:
     queued_player = player.Player(offline_api)
 else:
     try:
@@ -129,6 +134,14 @@ else:
             youtube_bot = bot.TelegramBot(plugins, youtube_api, gmusic_api, queued_player)
     except ValueError:
         logger.info("YouTube telegram bot unavailable.")
+
+    if enable_offline:
+        # This looks dumb, but it makes sense, I promise.
+        try:
+            if offline_api:
+                offline_bot = bot.TelegramBot(plugins, offline_api, gmusic_api, queued_player)
+        except ValueError:
+            logger.info("Offline telegram bot unavailable.")
 
 if "--no-rest" not in sys.argv:
     import ssl
