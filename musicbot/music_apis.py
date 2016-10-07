@@ -428,16 +428,20 @@ class GMusicAPI(AbstractSongProvider):
 
     def _load_suggestions(self, max_len):
         self._remote_station_create()
+        if len(self._suggestions) >= max_len:
+            return
+
         api_songs = self._api.get_station_tracks(
             self._station_id, recently_played_ids=self._last_played_ids, num_tracks=max(50, max_len))
         if api_songs:
             self._suggestions.extend(map(self._song_from_info, api_songs))
         else:
-            song_id = "Tj6fhurtstzgdpvfm4xv6i5cei4"
-            fallback_song = Song(song_id, self,
-                                 "Biste braun kriegste Fraun", "Mickie Krause",
-                                 str_rep="Mickie Krause - Biste braun kriegste Fraun")
-            self._suggestions.append(fallback_song)
+            if not self._suggestions:
+                song_id = "Tj6fhurtstzgdpvfm4xv6i5cei4"
+                fallback_song = Song(song_id, self,
+                                     "Biste braun kriegste Fraun", "Mickie Krause",
+                                     str_rep="Mickie Krause - Biste braun kriegste Fraun")
+                self._suggestions.append(fallback_song)
 
     def _remote_playlist_load(self):
         self._remote_playlist_create()
