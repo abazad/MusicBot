@@ -106,9 +106,9 @@ def add_directory(playlist_id, directory_path, recursive, db):
                 print("Could not load", joined_path, e)
                 continue
 
-            song_tuple = (song_id, song.title, song.description, str(song), joined_path)
+            song_tuple = (song_id, song.title, song.description, str(song), joined_path, song.duration)
             db.execute(
-                "INSERT OR IGNORE INTO songs(songId, title, description, stringRep, path) VALUES(?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO songs(songId, title, description, stringRep, path, duration) VALUES(?, ?, ?, ?, ?, ?)",
                 song_tuple)
             db.execute("INSERT OR IGNORE INTO playlistSongs(songId, playlistId) VALUES(?, ?)", (song_id, playlist_id))
 
