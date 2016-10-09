@@ -215,13 +215,12 @@ def request_secret(secret_key, message, hidden=True):
         return _secrets[secret_key]
 
     if hidden:
-        secret = getpass(message)
+        secret = getpass(message).strip()
     else:
-        secret = input(message)
+        secret = input(message).strip()
 
-    if secret.strip():
-        _secrets[secret_key] = secret.strip()
-        save_secrets()
+    _secrets[secret_key] = secret
+    save_secrets()
 
     return secret
 
