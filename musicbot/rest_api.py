@@ -5,6 +5,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from io import BytesIO
 
 import falcon
 import hug
@@ -798,3 +799,24 @@ def mark_active(playlist_id: str, user: hug.directives.user, response=None):
     except ValueError:
         response.status = falcon.HTTP_UNPROCESSABLE_ENTITY
         return "Unknown ID"
+
+
+@asyncio.coroutine
+@hug.get(output=hug.output_format.png_image)
+def get_album_art(song_id: hug.types.text, response=None):
+    try:
+        api = music_api_names['offline_api']
+    except KeyError:
+        response.status = falcon.HTTP_400
+        return "Not in offline mode"
+    db = sqlite3.connect(api._db_path)
+    try:
+        cursor = db.execute("SELECT albumArt FROM albumArts WHERE songId=?", [song_id])
+        result = cursor.fetchone()
+        if not result:
+            response.status = falcon.HTTP_404
+            return None
+
+        return BytesIO(result[0])
+    finally:
+        db.close()

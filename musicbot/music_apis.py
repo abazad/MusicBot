@@ -5,6 +5,7 @@ import socket
 import sqlite3
 import threading
 import time
+import traceback
 import typing
 import urllib
 from datetime import datetime
@@ -133,7 +134,7 @@ class Song(object):
                 raise e
 
             with _conversion_semaphore:
-                if not _version.debug or isfile(native_fname):
+                if (not _version.debug or isfile(native_fname)) and not isfile(fname):
                     song = AudioSegment.from_file(native_fname, native_fname.split(".")[-1])
                     # TODO normalization seems to cause a stutter of the playback
                     # song = effects.normalize(song)
@@ -930,6 +931,7 @@ class OfflineAPI(AbstractSongProvider):
                     "CREATE TABLE IF NOT EXISTS playlists(playlistId TEXT UNIQUE NOT NULL, name TEXT NOT NULL)")
                 db.execute(
                     "CREATE TABLE IF NOT EXISTS playlistSongs(playlistId INTEGER NOT NULL REFERENCES playlists(playlistId), songId TEXT NOT NULL REFERENCES songs(songId), PRIMARY KEY(playlistId, songId))")
+                db.execute("CREATE TABLE IF NOT EXISTS albumArts(songId TEXT PRIMARY KEY, albumArt BLOB NOT NULL)")
                 db.execute(
                     "INSERT OR IGNORE INTO songs(songId, title, description, stringRep, albumArtUrl, path) VALUES(?, ?, ?, ?, ?, ?)",
                     [
@@ -1064,7 +1066,8 @@ class OfflineAPI(AbstractSongProvider):
         if song.api != self:
             raise ValueError("Tried to download song %s with wrong API %s", song, self.get_name())
         # songs created by this API should not use the default load method
-        raise NotImplementedError("Somehow OfflineAPI._download was called")
+        # however, Song objects created by Song.from_json may call this method, so we just return the filename here
+        return self.lookup_song(song.song_id).load()
 
     def _load_next_songs(self, max_load=20):
         """

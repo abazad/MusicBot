@@ -1,13 +1,16 @@
 import difflib
-import json
 import os
+import sqlite3
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 from gmusicapi import CallFailure
+from mutagen.id3 import ID3
+from mutagen.mp3 import MP3, HeaderNotFoundError
 
-from musicbot.music_apis import GMusicAPI, OfflineAPI
+from musicbot.music_apis import GMusicAPI, OfflineAPI, Song
 
 
 def download_songs(song_ids, include_uploaded):
@@ -56,6 +59,83 @@ def ask_for_action():
 
 
 def handle_add_playlist():
+    choice = input("(1) a Google Play Music playlist\n(2) a local directory\nWherefrom? ")
+    if choice == "1":
+        handle_add_gmusic_playlist()
+    elif choice == "2":
+        handle_add_local_playlist()
+    else:
+        print("Invalid choice")
+        return
+
+
+def add_directory(playlist_id, directory_path, recursive, db):
+    isdir = os.path.isdir
+    isfile = os.path.isfile
+    join = os.path.join
+    for file_path in os.listdir(directory_path):
+        joined_path = join(directory_path, file_path)
+        if isdir(joined_path):
+            if recursive:
+                add_directory(playlist_id, joined_path, recursive, db)
+            else:
+                continue
+
+        if isfile(joined_path) and joined_path.endswith(".mp3"):
+            print("Loading song", joined_path)
+            try:
+                audio = MP3(joined_path, ID3=ID3)
+            except HeaderNotFoundError:
+                print("No ID3 header found for", joined_path)
+                continue
+            id3 = audio.tags
+            try:
+                title = id3['TIT2'][0]
+                if "TPE1" in id3:
+                    artist = id3['TPE1']
+                else:
+                    artist = id3.get("TPE2", None) or id3["TPE3"]
+                artist = artist[0]
+
+                if "APIC:" in id3:
+                    apic = id3['APIC:']
+                    db.execute("INSERT OR IGNORE INTO albumArts(songId, albumArt) VALUES(?, ?)",
+                               [joined_path, apic.data])
+                duration = datetime.fromtimestamp(audio.info.length).strftime("%M:%S")
+                song = Song(joined_path, offline_api, title, artist, duration=duration)
+            except (KeyError, IndexError) as e:
+                print("Could not load", joined_path, e)
+                continue
+
+            song_tuple = (joined_path, song.title, song.description, str(song), joined_path)
+            db.execute(
+                "INSERT OR IGNORE INTO songs(songId, title, description, stringRep, path) VALUES(?, ?, ?, ?, ?)",
+                song_tuple)
+            db.execute("INSERT OR IGNORE INTO playlistSongs(songId, playlistId) VALUES(?, ?)",
+                       (joined_path, playlist_id))
+
+
+def handle_add_local_playlist():
+    directory_path = input("Enter a directory path: ")
+    if not os.path.isdir(os.path.expanduser(directory_path)):
+        print("Invalid directory")
+        return
+    rec_choice = input("Include subdirectories (Y/N)? ").lower()
+    recursive = rec_choice == "y"
+
+    name = input("How do you want to call the playlist? ")
+
+    real_path = os.path.realpath(directory_path)
+    db = sqlite3.connect(offline_api._db_path)
+    try:
+        with db:
+            db.execute("INSERT INTO playlists(playlistId, name) VALUES(?, ?)", [real_path, name])
+            add_directory(real_path, real_path, recursive, db)
+    finally:
+        db.close()
+
+
+def handle_add_gmusic_playlist():
     share_token = input("Please enter a share token: ").strip()
     if not share_token:
         print("Empty share token")
