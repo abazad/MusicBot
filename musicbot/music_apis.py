@@ -77,7 +77,10 @@ class Song(object):
         self.albumArtUrl = albumArtUrl
         self._api = api
         self.duration = duration
-        self.user = str(user)
+        if user:
+            self.user = str(user)
+        else:
+            self.user = None
         self.loaded = False
 
         if str_rep:
@@ -899,7 +902,7 @@ class OfflineAPI(AbstractSongProvider):
         try:
             with db:
                 db.execute(
-                    "CREATE TABLE IF NOT EXISTS songs(songId TEXT PRIMARY KEY, title TEXT, description TEXT, stringRep TEXT, albumArtUrl TEXT, path TEXT UNIQUE NOT NULL)")
+                    "CREATE TABLE IF NOT EXISTS songs(songId TEXT PRIMARY KEY, title TEXT, description TEXT, stringRep TEXT, albumArtUrl TEXT, path TEXT UNIQUE NOT NULL, duration TEXT)")
                 db.execute(
                     "CREATE TABLE IF NOT EXISTS playlists(playlistId TEXT UNIQUE NOT NULL, name TEXT NOT NULL)")
                 db.execute(
@@ -925,7 +928,7 @@ class OfflineAPI(AbstractSongProvider):
         song_path = song.song_id + ".mp3"
         if not isfile(song_path):
             return None
-        return song.song_id, song.title, song.description, str(song), song.albumArtUrl, song_path
+        return song.song_id, song.title, song.description, str(song), song.albumArtUrl, song_path, song.duration
 
     @staticmethod
     def _get_song_tuple_generator(songs: typing.List[Song]):
@@ -1018,7 +1021,7 @@ class OfflineAPI(AbstractSongProvider):
                 cursor = db.cursor()
                 cursor.execute("INSERT OR IGNORE INTO playlists(playlistId, name) VALUES(?, ?)", [playlist_id, name])
                 cursor.executemany(
-                    "INSERT OR IGNORE INTO songs(songId, title, description, stringRep, albumArtUrl, path) VALUES(?, ?, ?, ?, ?, ?)",
+                    "INSERT OR IGNORE INTO songs(songId, title, description, stringRep, albumArtUrl, path, duration) VALUES(?, ?, ?, ?, ?, ?, ?)",
                     filter(None, self._get_song_tuple_generator(songs)))
                 cursor.executemany("INSERT OR IGNORE INTO playlistSongs(playlistId, songId) VALUES(?, ?)",
                                    map(lambda song: (playlist_id, song.song_id), songs))
@@ -1038,7 +1041,7 @@ class OfflineAPI(AbstractSongProvider):
         try:
             with db:
                 db.execute(
-                    "INSERT OR IGNORE INTO songs(songId, title, description, stringRep, albumArtUrl, path) VALUES(?, ?, ?, ?, ?, ?)",
+                    "INSERT OR IGNORE INTO songs(songId, title, description, stringRep, albumArtUrl, path, duration) VALUES(?, ?, ?, ?, ?, ?, ?)",
                     self._get_song_tuple(song))
                 db.execute("INSERT OR IGNORE INTO playlistSongs(playlistId, songId) VALUES(?, ?)",
                            (playlist_id, song.song_id))
@@ -1129,11 +1132,11 @@ class OfflineAPI(AbstractSongProvider):
         sqlite_query_args = list(_roundrobin(query_parts, query_parts))
         sqlite_query_parts = map(lambda part: "title LIKE ('%' || ? || '%') OR description LIKE ('%' || ? || '%')",
                                  query_parts)
-        sqlite_query = "SELECT songId, title, description, stringRep, albumArtUrl, path FROM songs WHERE " + " OR ".join(
+        sqlite_query = "SELECT songId, title, description, stringRep, albumArtUrl, path, duration FROM songs WHERE " + " OR ".join(
             sqlite_query_parts)
 
         def song_from_tuple(song_tuple):
-            song = Song(song_tuple[0], self, song_tuple[1], song_tuple[2], song_tuple[4], song_tuple[3])
+            song = Song(song_tuple[0], self, song_tuple[1], song_tuple[2], song_tuple[4], song_tuple[3], song_tuple[6])
             song.load = lambda: song_tuple[5]
             song.loaded = True
             return song
@@ -1152,13 +1155,14 @@ class OfflineAPI(AbstractSongProvider):
 
         try:
             with db:
-                cursor = db.execute("SELECT title, description, stringRep, albumArtUrl, path FROM songs WHERE songId=?",
-                                    [song_id])
+                cursor = db.execute(
+                    "SELECT title, description, stringRep, albumArtUrl, path, duration FROM songs WHERE songId=?",
+                    [song_id])
                 song_tuple = cursor.fetchone()
                 if not song_tuple:
                     return None
-                title, description, stringRep, albumArtUrl, path = song_tuple
-                song = Song(song_id, self, title, description, albumArtUrl, stringRep)
+                title, description, stringRep, albumArtUrl, path, duration = song_tuple
+                song = Song(song_id, self, title, description, albumArtUrl, stringRep, duration)
                 song.load = lambda: path
                 song.loaded = True
                 return song
