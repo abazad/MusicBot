@@ -3,45 +3,44 @@ import os
 import sqlite3
 import sys
 import threading
+import typing
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from os.path import join, realpath
 
 from gmusicapi import CallFailure
 from mutagen.id3 import ID3
 from mutagen.mp3 import MP3, HeaderNotFoundError
 
+from musicbot import config
 from musicbot.music_apis import GMusicAPI, OfflineAPI, Song
 
+all_songs_lock = threading.Lock()
 
-def download_songs(song_ids, include_uploaded):
-    own_songs = {}
-    if include_uploaded:
-        # This is a generator object loading 1000 songs at once
-        all_songs = api.get_all_songs(True)
 
-    all_songs_lock = threading.Lock()
-
-    def _lookup_song(song_id):
-        if not include_uploaded or song_id.startswith("T"):
-            return gmusic_api.lookup_song(song_id)
+def _lookup_gmusic_song(song_id):
+    if song_id.startswith("T"):
+        return gmusic_api.lookup_song(song_id)
+    if song_id in own_songs:
+        return own_songs[song_id]
+    with all_songs_lock:
         if song_id in own_songs:
             return own_songs[song_id]
-        with all_songs_lock:
-            if song_id in own_songs:
-                return own_songs[song_id]
-            result = None
-            for thousand_songs in all_songs:
-                for song_json in thousand_songs:
-                    if "id" in song_json:
-                        song = gmusic_api._song_from_info(song_json)
-                        own_songs[song.song_id] = song
-                        if song.song_id == song_id:
-                            result = song
-                if result:
-                    break
-            return result
+        result = None
+        for thousand_songs in all_songs:
+            for song_json in thousand_songs:
+                if "id" in song_json:
+                    song = gmusic_api._song_from_info(song_json)
+                    own_songs[song.song_id] = song
+                    if song.song_id == song_id:
+                        result = song
+            if result:
+                break
+        return result
 
-    songs = filter(None, map(_lookup_song, song_ids))
+
+def download_songs(song_ids: typing.Iterator[str]):
+    songs = filter(None, map(_lookup_gmusic_song, song_ids))
 
     def _load(song):
         print("Loading song", song)
@@ -72,7 +71,6 @@ def handle_add_playlist():
 def add_directory(playlist_id, directory_path, recursive, db):
     isdir = os.path.isdir
     isfile = os.path.isfile
-    join = os.path.join
     for file_path in os.listdir(directory_path):
         joined_path = join(directory_path, file_path)
         if isdir(joined_path):
@@ -83,6 +81,7 @@ def add_directory(playlist_id, directory_path, recursive, db):
 
         if isfile(joined_path) and joined_path.endswith(".mp3"):
             print("Loading song", joined_path)
+            song_id = joined_path[:-4]
             try:
                 audio = MP3(joined_path, ID3=ID3)
             except HeaderNotFoundError:
@@ -100,19 +99,18 @@ def add_directory(playlist_id, directory_path, recursive, db):
                 if "APIC:" in id3:
                     apic = id3['APIC:']
                     db.execute("INSERT OR IGNORE INTO albumArts(songId, albumArt) VALUES(?, ?)",
-                               [joined_path, apic.data])
+                               [song_id, apic.data])
                 duration = datetime.fromtimestamp(audio.info.length).strftime("%M:%S")
-                song = Song(joined_path, offline_api, title, artist, duration=duration)
+                song = Song(song_id, offline_api, title, artist, duration=duration)
             except (KeyError, IndexError) as e:
                 print("Could not load", joined_path, e)
                 continue
 
-            song_tuple = (joined_path, song.title, song.description, str(song), joined_path)
+            song_tuple = (song_id, song.title, song.description, str(song), joined_path)
             db.execute(
                 "INSERT OR IGNORE INTO songs(songId, title, description, stringRep, path) VALUES(?, ?, ?, ?, ?)",
                 song_tuple)
-            db.execute("INSERT OR IGNORE INTO playlistSongs(songId, playlistId) VALUES(?, ?)",
-                       (joined_path, playlist_id))
+            db.execute("INSERT OR IGNORE INTO playlistSongs(songId, playlistId) VALUES(?, ?)", (song_id, playlist_id))
 
 
 def handle_add_local_playlist():
@@ -125,7 +123,7 @@ def handle_add_local_playlist():
 
     name = input("How do you want to call the playlist? ")
 
-    real_path = os.path.realpath(directory_path)
+    real_path = realpath(directory_path)
     db = sqlite3.connect(offline_api._db_path)
     try:
         with db:
@@ -141,22 +139,16 @@ def handle_add_gmusic_playlist():
         print("Empty share token")
         return
 
-    incluce_uploaded = input(
-        "Do you want to include your own (uploaded) songs (Y/N)? May take significantly longer. ").strip().lower()
-    incluce_uploaded = incluce_uploaded == "y"
     try:
         if share_token.endswith("%3D%3D"):
             share_token = share_token[:-6] + "=="
 
-        if incluce_uploaded:
-            playlists = list(filter(lambda p: p['shareToken'] == share_token, api.get_all_user_playlist_contents()))
-            if playlists:
-                playlist = playlists[0]['tracks']
-            else:
-                print("Invalid share token")
-                return
+        playlists = list(filter(lambda p: p['shareToken'] == share_token, api.get_all_user_playlist_contents()))
+        if playlists:
+            playlist = playlists[0]['tracks']
         else:
-            playlist = api.get_shared_playlist_contents(share_token)
+            print("Invalid share token")
+            return
     except CallFailure as e:
         print("Invalid share token", e)
         return
@@ -171,20 +163,29 @@ def handle_add_gmusic_playlist():
         if " " in name:
             name = None
 
-    def _get_song_id(song_json):
+    def _get_song_id(song_json) -> str:
         try:
             return song_json['trackId']
         except KeyError:
             return None
 
-    song_ids = list(filter(None, map(_get_song_id, playlist)))
+    songs_path = config.get_songs_path()
+
+    def _to_offline_song(gmusic_song):
+        if gmusic_song:
+            gmusic_song.song_id = realpath(join(songs_path, gmusic_song.song_id + ".mp3"))[:-4]
+            gmusic_song.api = offline_api
+        return gmusic_song
+
+    song_ids = filter(None, map(_get_song_id, playlist))
+    songs = filter(None, map(_to_offline_song, map(_lookup_gmusic_song, filter(None, map(_get_song_id, playlist)))))
 
     # Download songs
     print("Downloading songs in playlist", name)
-    download_songs(song_ids, incluce_uploaded)
+    download_songs(song_ids)
 
     print("Updating playlists database")
-    offline_api.add_playlist(share_token, name, song_ids)
+    offline_api.add_playlist(share_token, name, list(songs))
     print("Done.")
 
 
@@ -257,6 +258,9 @@ if __name__ == "__main__":
     try:
         gmusic_api = GMusicAPI()
         api = gmusic_api.get_api()
+        own_songs = {}
+        # This is a generator object loading 1000 songs at once
+        all_songs = api.get_all_songs(True)
     except ValueError:
         print("Couldn't connect to GMusic")
         sys.exit(1)
