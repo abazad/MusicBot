@@ -150,6 +150,7 @@ class Player(object):
             self._next_chosen_event.set()
 
             Notifier.notify(Cause.current_song(song))
+            self._add_played(song)
 
             logger.debug("LEAVING _on_song_end (%s)", thread_name)
 
