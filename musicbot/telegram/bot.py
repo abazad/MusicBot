@@ -402,7 +402,7 @@ class TelegramBot(notifier.Subscribable):
 
                 song_list = song_list[offset:]
                 song_list = song_list[:max_len]
-            elif suggest:
+            elif suggest and not offset:
                 song_list = api.get_suggestions(max_len=15)
                 cache_time = 20
                 next_offset = 0
