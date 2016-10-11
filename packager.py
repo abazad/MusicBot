@@ -4,7 +4,8 @@ from zipfile import ZipFile
 
 import _version
 
-whitelist = ["config", "musicbot", "LICENSE", "main.py", "requirements.txt", "updater.py"]
+whitelist = ["config", "musicbot", "LICENSE", "main.py", "requirements.txt", "updater.py", "playlist_manager.py",
+             "invalidate_secret.py"]
 
 
 def _add_file(package, cur_dir, file):
