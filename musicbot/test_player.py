@@ -22,6 +22,9 @@ class TestSongProvider(AbstractSongProvider):
     def _download(self, song):
         return self._loader(song.song_id)
 
+    def get_name(self):
+        return "TEST_SONG_PROVIDER"
+
     def get_song(self):
         song_id = "test" + str(self.counter)
         song = Song(song_id, self)
