@@ -2,6 +2,9 @@ import logging
 import os
 import signal
 import sys
+import time
+from _socket import AF_INET, socket, SOL_SOCKET, SO_BROADCAST, SO_REUSEADDR
+from _socket import SOCK_DGRAM
 from datetime import datetime
 from getpass import getpass
 
@@ -178,6 +181,31 @@ if "--no-rest" not in sys.argv:
                     raise e
 
         queued_player.run()
+
+        _broadcast = True
+
+
+        def _broadcast_ip():
+            cs = socket(AF_INET, SOCK_DGRAM)
+            cs.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+            cs.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
+            try:
+                while _broadcast:
+                    try:
+                        cs.sendto("8443".encode("utf-8"), ('255.255.255.255', 42945))
+                    except OSError as network_error:
+                        logger.warning("Error while broadcasting: " + network_error)
+                    time.sleep(3)
+            finally:
+                cs.close()
+
+
+        def _stop_broadcast():
+            global _broadcast
+            _broadcast = False
+
+
+        async_handler.execute(_broadcast_ip, _stop_broadcast, "UDP broadcaster")
 
 
         def _exit():
