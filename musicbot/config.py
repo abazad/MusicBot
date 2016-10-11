@@ -3,6 +3,7 @@ import json
 import locale
 import logging
 import os
+import typing
 from getpass import getpass
 from os import path
 
@@ -134,6 +135,23 @@ def _load_secrets():
 _secrets = _load_secrets()
 
 
+def _load_state() -> dict:
+    state_path = path.join(_config_dir, "state.json")
+    if path.isfile(state_path):
+        with open(state_path, 'r') as state_file:
+            return json.loads(state_file.read())
+    else:
+        return {}
+
+
+def _save_state():
+    with open(path.join(_config_dir, "state.json"), 'w') as state_file:
+        state_file.write(json.dumps(_state))
+
+
+_state = _load_state()
+
+
 def get_auto_updates_enabled():
     return _config.get("auto_updates", False)
 
@@ -144,15 +162,6 @@ def get_load_plugins_enabled():
 
 def get_suggest_songs_enabled():
     return _config.get("suggest_songs", True)
-
-
-def get_telegram_password_enabled():
-    return _config.get("enable_session_password", False)
-
-
-def set_telegram_password_enabled(enabled):
-    _config["enable_session_password"] = enabled
-    _save_config()
 
 
 def get_allow_rest_admin():
@@ -223,6 +232,32 @@ def request_secret(secret_key, message, hidden=True):
     save_secrets()
 
     return secret
+
+
+def get_state(key, default=None):
+    """
+    Get a state value.
+    :param key: the key to look up in the state dict
+    :param default: the default value to return if key is not present
+    :return: the state or None
+    """
+    return _state.get(key, default)
+
+
+def save_state(key, value):
+    _state[key] = value
+    _save_state()
+
+
+def save_states(states: typing.Dict[str, str]):
+    for key in states:
+        _state[key] = states[key]
+    _save_state()
+
+
+def reset_state():
+    _state.clear()
+    _save_state()
 
 
 save_secrets()

@@ -13,26 +13,29 @@ def plugin_command(func):
 
 def admin_command(func):
     admin_key = "telegram_admin_chat_id"
-    secrets = config.get_secrets()
 
     def _command(self, bot, update):
-        if admin_key in secrets and (secrets[admin_key] == update.message.chat_id):
+        chat_id = update.message.chat_id
+        admin_chat_id = config.get_state(admin_key, None)
+        if admin_chat_id == chat_id:
             return func(self, bot, update)
         else:
-            bot.send_message(chat_id=update.message.chat_id, text="This command is for admins only")
+            bot.send_message(chat_id=chat_id, text="This command is for admins only")
             return None
 
     return _command
 
 
 def password_protected_command(func):
+    _password_enabled_key = "telegram_password_enabled"
+
     def _command(self, bot, update):
         chat_id = update.message.chat_id
-        if config.get_telegram_password_enabled() and not self.get_password():
+        if config.get_state(_password_enabled_key) and not self.get_password():
             bot.send_message(chat_id=chat_id, text="Admin hasn't decided which password to use yet")
             return None
         user = User(user=update.message.from_user)
-        if (not config.get_telegram_password_enabled()) or (user in self.get_clients()):
+        if (not config.get_state(_password_enabled_key)) or (user in self.get_clients()):
             return func(self, bot, update)
         else:
             bot.send_message(chat_id=chat_id, text="Please log in with /login [password]")

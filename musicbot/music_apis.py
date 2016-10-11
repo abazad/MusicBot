@@ -535,19 +535,18 @@ class GMusicAPI(AbstractSongProvider):
         self._write_ids()
 
     def _load_ids(self):
-        secrets = config.get_secrets()
-        self._playlist_token = secrets.get("playlist_token", None)
+        self._playlist_token = config.get_state("playlist_token", None)
         if not self._playlist_token:
             return
-        self._playlist_id = secrets.get("playlist_id", None)
-        self._station_id = secrets.get("station_id", None)
+        self._playlist_id = config.get_state("playlist_id", None)
+        self._station_id = config.get_state("station_id", None)
 
     def _write_ids(self):
-        secrets = config.get_secrets()
-        secrets['playlist_token'] = self._playlist_token
-        secrets['playlist_id'] = self._playlist_id
-        secrets['station_id'] = self._station_id
-        config.save_secrets()
+        config.save_states({
+            'playlist_token': self._playlist_token,
+            'playlist_id': self._playlist_id,
+            'station_id': self._station_id
+        })
 
     @staticmethod
     def _format_playlist_name(name):

@@ -34,6 +34,9 @@ def get_ip_address():
 admin_commands = ["clearqueue", "ip", "togglepassword", "setpassword", "banuser", "setquality",
                   "stationremove", "stationreload", "reset", "exit"]
 
+_password_enabled_key = "telegram_password_enabled"
+_admin_key = "telegram_admin_chat_id"
+
 _clients = set()
 _password = None
 
@@ -203,7 +206,7 @@ class TelegramBot(notifier.Subscribable):
 
     def is_logged_in(self, telegram_user):
         user = User(user=telegram_user)
-        return (not config.get_telegram_password_enabled()) or (user in _clients)
+        return (not config.get_state(_password_enabled_key)) or (user in _clients)
 
     def get_current_song_message(self):
         return "Now playing: {}".format(self._player.get_current_song())
@@ -237,7 +240,7 @@ class TelegramBot(notifier.Subscribable):
     def login_command(self, bot, update):
         chat_id = update.message.chat_id
         user = update.message.from_user
-        if not config.get_telegram_password_enabled():
+        if not config.get_state(_password_enabled_key):
             bot.send_message(chat_id=chat_id, text="There is no password")
             return
 
@@ -274,13 +277,13 @@ class TelegramBot(notifier.Subscribable):
 
     def admin_command(self, bot, update):
         chat_id = update.message.chat_id
-        secrets = config.get_secrets()
-        admin_key = "telegram_admin_chat_id"
-        if not secrets.get(admin_key, 0):
-            secrets[admin_key] = chat_id
+
+        admin_chat_id = config.get_state(_admin_key)
+        if not admin_chat_id:
+            config.save_state(_admin_key, chat_id)
             config.save_secrets()
             text = "You're admin now!"
-        elif chat_id == secrets[admin_key]:
+        elif chat_id == admin_chat_id:
             text = "You already are admin!"
         else:
             bot.send_message(text="There can be only one!", chat_id=chat_id)
@@ -451,8 +454,7 @@ class TelegramBot(notifier.Subscribable):
     @decorators.admin_command
     def reset_command(self, bot, update):
         self._song_provider.reset()
-        del config.get_secrets()['telegram_admin_chat_id']
-        config.save_secrets()
+        config.reset_state()
 
         def _exit():
             async_handler.shutdown(False)
@@ -471,21 +473,21 @@ class TelegramBot(notifier.Subscribable):
     @decorators.admin_command
     def toggle_password_command(self, bot, update):
         chat_id = update.message.chat_id
-        if config.get_telegram_password_enabled():
-            config.set_telegram_password_enabled(False)
+        if config.get_state(_password_enabled_key):
+            config.save_state(_password_enabled_key, False)
             _clients.clear()
             global _password
             _password = None
             bot.send_message(chat_id=chat_id, text="Password disabled")
         else:
-            config.set_telegram_password_enabled(True)
+            config.save_state(_password_enabled_key, True)
             bot.send_message(
                 chat_id=chat_id, text="Password is now enabled. Set a password with /setpassword [password]")
 
     @decorators.admin_command
     def set_password_command(self, bot, update):
         chat_id = update.message.chat_id
-        if not config.get_telegram_password_enabled():
+        if not config.get_state(_password_enabled_key):
             bot.send_message(chat_id=chat_id, text="Please enable password protection with /togglepassword first")
             return
 
@@ -509,7 +511,7 @@ class TelegramBot(notifier.Subscribable):
     def ban_user_command(self, bot, update):
         chat_id = update.message.chat_id
 
-        if not config.get_telegram_password_enabled():
+        if not config.get_state(_password_enabled_key):
             bot.send_message(chat_id=chat_id, text="Password is disabled")
             return
 
