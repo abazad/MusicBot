@@ -895,6 +895,9 @@ class OfflineAPI(AbstractSongProvider):
         self._create_db()
         self._next_songs = []
         self._last_played_ids = []
+        active_playlist_id = config.get_state("active_offline_playlist")
+        if active_playlist_id:
+            self.set_active_playlist(active_playlist_id)
 
     def _create_db(self):
         db = sqlite3.connect(self._db_path)
@@ -1112,6 +1115,7 @@ class OfflineAPI(AbstractSongProvider):
             song_ids = list(map(_song_id_from_tuple, self._get_tuple_generator(cursor)))
             playlist = OfflineAPI._Playlist(playlist_id, name, song_ids)
             self._active_playlist = playlist
+            config.save_state("active_offline_playlist", playlist.playlist_id)
             self._next_songs = []
             self._last_played_ids = []
         except IndexError:
